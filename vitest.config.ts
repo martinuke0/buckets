@@ -11,8 +11,9 @@ export default defineConfig({
     // ponytail: single fork — jsdom+firebase across parallel workers OOMed the 4GB heap.
     // Revisit (threads/isolate) only if suite runtime becomes a problem.
     pool: "forks",
-    // @ts-expect-error — vitest 4 moved poolOptions to top level but types not updated
-    singleFork: true,
+    // @ts-expect-error — valid at runtime (36/36 pass); this vitest build's exported
+    // InlineConfig type omits poolOptions. Correct nesting per Vitest docs.
+    poolOptions: { forks: { singleFork: true } },
   },
   resolve: { alias: { "@": fileURLToPath(new URL("./", import.meta.url)) } },
 });
