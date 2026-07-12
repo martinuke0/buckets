@@ -127,7 +127,7 @@ export function SimulateIncomeDialog({
             placeholder="0.00"
             className="w-full rounded-lg px-4 py-2"
             style={{
-              background: "var(--color-bg)",
+              background: "var(--color-base)",
               border: "1px solid var(--color-border)",
               color: "var(--color-text)",
             }}
@@ -145,7 +145,7 @@ export function SimulateIncomeDialog({
             </div>
             <div
               className="rounded-lg p-3"
-              style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)" }}
+              style={{ background: "var(--color-base)", border: "1px solid var(--color-border)" }}
             >
               <SplitList allocations={preview} buckets={buckets} />
             </div>
