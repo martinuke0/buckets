@@ -11,7 +11,8 @@ export default defineConfig({
     // ponytail: single fork — jsdom+firebase across parallel workers OOMed the 4GB heap.
     // Revisit (threads/isolate) only if suite runtime becomes a problem.
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
+    // @ts-expect-error — vitest 4 moved poolOptions to top level but types not updated
+    singleFork: true,
   },
   resolve: { alias: { "@": fileURLToPath(new URL("./", import.meta.url)) } },
 });
