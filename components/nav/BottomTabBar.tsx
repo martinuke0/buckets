@@ -12,18 +12,20 @@ const TABS = [
 export function BottomTabBar() {
   const pathname = usePathname();
   return (
-    <nav className="fixed bottom-0 inset-x-0 flex justify-around py-2"
+    <nav className="fixed bottom-0 inset-x-0"
       style={{ background: "var(--color-card)", borderTop: "1px solid var(--color-border)" }}>
-      {TABS.map((t) => {
-        const active = pathname === t.href;
-        return (
-          <Link key={t.href} href={t.href} aria-current={active ? "page" : undefined}
-            className="text-xs px-3 py-1"
-            style={{ color: active ? "var(--color-text)" : "var(--color-muted)", fontWeight: active ? 700 : 400 }}>
-            {t.label}
-          </Link>
-        );
-      })}
+      <div className="max-w-md mx-auto flex justify-around py-2">
+        {TABS.map((t) => {
+          const active = pathname === t.href;
+          return (
+            <Link key={t.href} href={t.href} aria-current={active ? "page" : undefined}
+              className="text-xs px-4 py-1 rounded-md transition-colors"
+              style={{ color: active ? "var(--color-text)" : "var(--color-muted)", fontWeight: active ? 700 : 400 }}>
+              {t.label}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }
