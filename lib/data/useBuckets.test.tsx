@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { useBuckets } from "@/lib/data/useBuckets";
 
-vi.mock("@/lib/auth/AuthProvider", () => ({ useAuth: () => ({ user: { uid: "u1", email: null }, loading: false }) }));
+// Stable references: a fresh user/return object each render would change the
+// useEffect deps every render → resubscribe loop → OOM. Mirror the real
+// AuthProvider, which returns a stable state reference.
+const mockAuth = { user: { uid: "u1", email: null }, loading: false };
+vi.mock("@/lib/auth/AuthProvider", () => ({ useAuth: () => mockAuth }));
 vi.mock("firebase/firestore", () => ({
   collection: () => ({}),
   onSnapshot: (_q: unknown, cb: (snap: unknown) => void) => {
