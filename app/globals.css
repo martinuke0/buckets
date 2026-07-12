@@ -1,9 +1,18 @@
 @import "tailwindcss";
 
 :root {
+  --color-base: #0E0F13;
+  --color-card: #1A1C22;
+  --color-border: #2A2D35;
+  --color-text: #E8EAED;
+  --color-muted: #8A8F98;
+  --grad-brand: linear-gradient(90deg, #9945FF, #14F195);
+  --grad-danger: linear-gradient(90deg, #FF8A3D, #FF5E57);
   --background: #ffffff;
   --foreground: #171717;
 }
+
+html, body { background: var(--color-base); color: var(--color-text); color-scheme: dark; }
 
 @theme inline {
   --color-background: var(--background);
