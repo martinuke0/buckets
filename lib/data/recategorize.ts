@@ -1,4 +1,4 @@
-import { doc, runTransaction, increment, setDoc } from "firebase/firestore";
+import { doc, runTransaction, increment } from "firebase/firestore";
 import { getDb } from "@/lib/firebase/client";
 import { bucketsCol, txCol } from "@/lib/model/paths";
 import type { Transaction, Bucket } from "@/lib/model/types";
