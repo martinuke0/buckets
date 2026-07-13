@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
 import { useBankSync } from "@/lib/bank/useBankSync";
@@ -49,7 +50,14 @@ export default function Page() {
 
       <div style={{ marginBottom: "1rem" }}>
         {buckets.map((bucket) => (
-          <BucketCard key={bucket.id} bucket={bucket} />
+          <Link
+            key={bucket.id}
+            href={`/dashboard/bucket/${bucket.id}`}
+            style={{ display: "block", cursor: "pointer", transition: "opacity 0.2s" }}
+            className="hover:opacity-80"
+          >
+            <BucketCard bucket={bucket} />
+          </Link>
         ))}
       </div>
 

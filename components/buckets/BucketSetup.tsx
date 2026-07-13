@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Bucket } from "@/lib/model/types";
 import { AllocationBar } from "./AllocationBar";
 import { BucketRow } from "./BucketRow";
@@ -68,6 +68,8 @@ function SortableBucketRow({
 
 export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: BucketSetupProps) {
   const [buckets, setBuckets] = useState<Bucket[]>(initial);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -80,6 +82,13 @@ export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: B
   const isValid = total === 100;
   const cap = bucketCapFor(premium);
   const atCap = !canAddBucket(buckets, premium);
+
+  useEffect(() => {
+    if (saved) {
+      const timer = setTimeout(() => setSaved(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [saved]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -126,9 +135,12 @@ export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: B
     setBuckets((prev) => [...prev, newBucket]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaving(true);
     const bucketsWithOrder = buckets.map((b, i) => ({ ...b, order: i }));
-    onSave(bucketsWithOrder);
+    await Promise.resolve(onSave(bucketsWithOrder));
+    setSaving(false);
+    setSaved(true);
   };
 
   return (
@@ -214,17 +226,17 @@ export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: B
         <button
           type="button"
           onClick={handleSave}
-          disabled={!isValid}
-          className="px-4 py-2 rounded text-sm font-medium"
+          disabled={!isValid || saving}
+          className="px-4 py-2 rounded text-sm font-medium transition-transform hover:scale-105 active:scale-95"
           style={{
-            background: isValid ? "var(--grad-brand)" : "var(--color-card)",
-            opacity: isValid ? 1 : 0.5,
-            cursor: isValid ? "pointer" : "not-allowed",
+            background: (isValid && !saving) ? "var(--grad-brand)" : "var(--color-card)",
+            opacity: (isValid && !saving) ? 1 : 0.5,
+            cursor: (isValid && !saving) ? "pointer" : "not-allowed",
             color: "var(--color-text)",
           }}
           aria-label="Save"
         >
-          Save
+          {saving ? "Saving..." : saved ? "Saved ✓" : "Save"}
         </button>
       </div>
     </div>
