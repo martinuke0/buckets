@@ -10,6 +10,7 @@ export interface Bucket {
   type: BucketType;      // "virtual" in MVP
   remaining: Cents;
   allocated: Cents;
+  order?: number;        // optional display order for reordering
 }
 
 export interface Transaction {
