@@ -50,4 +50,15 @@ describe("BucketSetup", () => {
     expect(screen.queryByText(/need more buckets/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add bucket/i })).toBeInTheDocument();
   });
+  it("conserves total=100 when changing percent beyond recipient capacity", () => {
+    const testBuckets: Bucket[] = [
+      { id: "a", name: "Rent", colorIndex: 0, percent: 60, type: "virtual", remaining: 0, allocated: 0 },
+      { id: "b", name: "Savings", colorIndex: 1, percent: 10, type: "virtual", remaining: 0, allocated: 0 },
+      { id: "c", name: "Food", colorIndex: 2, percent: 30, type: "virtual", remaining: 0, allocated: 0 },
+    ];
+    render(<BucketSetup initial={testBuckets} premium={false} onSave={vi.fn()} onDelete={vi.fn()} />);
+    const rentInput = screen.getByLabelText(/rent percentage/i);
+    fireEvent.change(rentInput, { target: { value: "90" } });
+    expect(screen.getByTestId("total-percent")).toHaveTextContent("100");
+  });
 });

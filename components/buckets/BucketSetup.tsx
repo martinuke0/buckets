@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Bucket } from "@/lib/model/types";
 import { AllocationBar } from "./AllocationBar";
 import { BucketRow } from "./BucketRow";
-import { canAddBucket, bucketCapFor, deleteBucket } from "@/lib/buckets/edit";
+import { canAddBucket, bucketCapFor, deleteBucket, resplitAdjacent } from "@/lib/buckets/edit";
 import {
   DndContext,
   closestCenter,
@@ -52,13 +52,14 @@ function SortableBucketRow({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes}>
       <BucketRow
         bucket={bucket}
         onPercentChange={onPercentChange}
         onRename={onRename}
         onRecolor={onRecolor}
         onDelete={onDelete}
+        dragHandleProps={listeners}
       />
     </div>
   );
@@ -93,21 +94,26 @@ export function BucketSetup({ initial, premium, onSave, onDelete }: BucketSetupP
 
   const handlePercentChange = (id: string, newPercent: number) => {
     setBuckets((prev) => {
-      const idx = prev.findIndex((b) => b.id === id);
-      if (idx === -1) return prev;
+      const editedIdx = prev.findIndex((b) => b.id === id);
+      if (editedIdx === -1) return prev;
 
-      const delta = newPercent - prev[idx].percent;
       const savingsIdx = prev.findIndex((b) => b.name.toLowerCase() === "savings");
-      const recipientIdx = savingsIdx !== -1 ? savingsIdx : prev.findIndex((b, i) => i !== idx);
+      const recipientIdx = savingsIdx !== -1 ? savingsIdx : prev.findIndex((b, i) => i !== editedIdx);
 
       if (recipientIdx === -1) return prev;
 
+      const edited = prev[editedIdx];
+      const recipient = prev[recipientIdx];
+      const pairSum = edited.percent + recipient.percent;
+      const clampedNewPercent = Math.max(0, Math.min(Math.round(newPercent), pairSum));
+      const newRecipientPercent = pairSum - clampedNewPercent;
+
       return prev.map((b, i) => {
-        if (i === idx) {
-          return { ...b, percent: Math.max(0, Math.min(100, newPercent)) };
+        if (i === editedIdx) {
+          return { ...b, percent: clampedNewPercent };
         }
         if (i === recipientIdx) {
-          return { ...b, percent: Math.max(0, b.percent - delta) };
+          return { ...b, percent: newRecipientPercent };
         }
         return b;
       });

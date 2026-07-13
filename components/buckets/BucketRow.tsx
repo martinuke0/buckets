@@ -10,6 +10,7 @@ interface BucketRowProps {
   onRename: (newName: string) => void;
   onRecolor: (colorIndex: number) => void;
   onDelete: () => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }
 
 export function BucketRow({
@@ -18,6 +19,7 @@ export function BucketRow({
   onRename,
   onRecolor,
   onDelete,
+  dragHandleProps,
 }: BucketRowProps) {
   const handlePercentInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
@@ -31,7 +33,9 @@ export function BucketRow({
       <span
         className="inline-block h-5 w-5 cursor-grab"
         aria-label="Drag to reorder"
-        role="img"
+        role="button"
+        tabIndex={0}
+        {...dragHandleProps}
       >
         <svg
           viewBox="0 0 20 20"
