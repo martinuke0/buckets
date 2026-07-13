@@ -36,7 +36,8 @@ export function BucketRow({
         <svg
           viewBox="0 0 20 20"
           fill="currentColor"
-          className="h-full w-full text-gray-500"
+          className="h-full w-full"
+          style={{ color: "var(--color-muted)" }}
         >
           <circle cx="7" cy="5" r="1.5" />
           <circle cx="13" cy="5" r="1.5" />
@@ -53,7 +54,7 @@ export function BucketRow({
         aria-hidden="true"
       />
 
-      <span className="flex-1 text-sm text-gray-200">{bucket.name}</span>
+      <span className="flex-1 text-sm" style={{ color: "var(--color-text)" }}>{bucket.name}</span>
 
       <input
         type="number"
@@ -62,10 +63,11 @@ export function BucketRow({
         min="0"
         max="100"
         step="0.1"
-        className="w-16 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-right text-sm text-gray-200 focus:border-gray-500 focus:outline-none"
+        className="w-16 rounded px-2 py-1 text-right text-sm focus:outline-none"
+        style={{ background: "var(--color-base)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
         aria-label={`${bucket.name} percentage`}
       />
-      <span className="text-sm text-gray-400">%</span>
+      <span className="text-sm" style={{ color: "var(--color-muted)" }}>%</span>
 
       <BucketMenu
         bucket={bucket}
