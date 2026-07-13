@@ -1,0 +1,145 @@
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { splitIncome, type SplitRule } from "../../lib/split/engine";
+
+// NormalizedTxn type copied from lib/bank/provider to avoid fragile cross-package import
+export interface NormalizedTxn {
+  providerTxnId: string;
+  amount: number;      // integer cents, positive = money IN (our convention)
+  description: string;
+  bookedAt: string;    // ISO date (YYYY-MM-DD)
+  isIncome: boolean;
+}
+
+export async function saveConnection(
+  uid: string,
+  itemId: string,
+  accessToken: string
+): Promise<void> {
+  await getFirestore()
+    .doc(`bankConnections/${uid}/items/${itemId}`)
+    .set({
+      accessToken,
+      cursor: null,
+      createdAt: new Date().toISOString(),
+    });
+}
+
+export async function listConnections(
+  uid: string
+): Promise<{ itemId: string; accessToken: string; cursor: string | null }[]> {
+  const snap = await getFirestore()
+    .collection(`bankConnections/${uid}/items`)
+    .get();
+  return snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+    itemId: d.id,
+    accessToken: d.get("accessToken") as string,
+    cursor: d.get("cursor") as string | null,
+  }));
+}
+
+export async function saveCursor(
+  uid: string,
+  itemId: string,
+  cursor: string
+): Promise<void> {
+  await getFirestore()
+    .doc(`bankConnections/${uid}/items/${itemId}`)
+    .update({ cursor });
+}
+
+export async function writeTransactions(
+  uid: string,
+  txns: NormalizedTxn[]
+): Promise<NormalizedTxn[]> {
+  const db = getFirestore();
+
+  // Read existing transaction IDs first
+  const txRef = db.collection(`users/${uid}/transactions`);
+  const existingSnap = await txRef.get();
+  const existingIds = new Set(existingSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => d.id));
+
+  // Filter to only new transactions
+  const newTxns = txns.filter((t) => !existingIds.has(t.providerTxnId));
+
+  if (newTxns.length === 0) {
+    return [];
+  }
+
+  // Write new transactions
+  const batch = db.batch();
+  for (const t of newTxns) {
+    const ref = db.doc(`users/${uid}/transactions/${t.providerTxnId}`);
+    batch.set(ref, {
+      amount: t.amount,
+      description: t.description,
+      bookedAt: t.bookedAt,
+      bucketId: null,
+      isIncome: t.isIncome,
+    });
+  }
+  await batch.commit();
+
+  return newTxns;
+}
+
+export async function applyIncomeAdmin(
+  uid: string,
+  income: number
+): Promise<void> {
+  const db = getFirestore();
+
+  // Read user's buckets
+  const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+
+  if (bucketsSnap.empty) {
+    console.log(`applyIncomeAdmin: user ${uid} has no buckets, skipping`);
+    return;
+  }
+
+  const rules: SplitRule[] = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+    bucketId: d.id,
+    percent: d.get("percent") as number,
+  }));
+
+  // Validate percents sum to 100
+  const total = rules.reduce((sum, r) => sum + r.percent, 0);
+  if (Math.abs(total - 100) >= 0.001) {
+    console.log(
+      `applyIncomeAdmin: user ${uid} bucket percents sum to ${total}, not 100; skipping`
+    );
+    return;
+  }
+
+  // Split the income using the shared engine
+  let splits;
+  try {
+    splits = splitIncome(income, rules);
+  } catch (err) {
+    console.error(`applyIncomeAdmin: splitIncome failed for user ${uid}:`, err);
+    return;
+  }
+
+  // Write allocations and increment buckets in a transaction
+  await db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    for (const s of splits) {
+      const allocRef = db.collection(`users/${uid}/allocations`).doc();
+      tx.set(allocRef, {
+        bucketId: s.bucketId,
+        amount: s.amount,
+        createdAt: new Date().toISOString(),
+      });
+
+      const bucketRef = db.doc(`users/${uid}/buckets/${s.bucketId}`);
+      tx.update(bucketRef, {
+        remaining: FieldValue.increment(s.amount),
+        allocated: FieldValue.increment(s.amount),
+      });
+    }
+  });
+}
+
+export async function listConnectedUsers(): Promise<string[]> {
+  const db = getFirestore();
+  const snap = await db.collection("bankConnections").get();
+  return snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => d.id);
+}
