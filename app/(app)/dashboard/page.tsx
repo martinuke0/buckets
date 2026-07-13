@@ -1,12 +1,17 @@
 "use client";
 import { useState } from "react";
 import { useBuckets } from "@/lib/data/useBuckets";
+import { useTransactions } from "@/lib/data/useTransactions";
+import { useBankConnection } from "@/lib/bank/useBankConnection";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
+import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
 
 export default function Page() {
   const { buckets, loading } = useBuckets();
+  const { transactions, loading: txLoading } = useTransactions();
+  const { refresh, busy: syncBusy, lastResult } = useBankConnection();
   const [showDialog, setShowDialog] = useState(false);
 
   if (loading) {
@@ -56,6 +61,34 @@ export default function Page() {
           onClose={() => setShowDialog(false)}
         />
       )}
+
+      <div className="mt-8">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <h2 className="text-xl font-bold">Transactions</h2>
+          <button
+            onClick={refresh}
+            disabled={syncBusy}
+            className="rounded-lg py-2 px-3 text-sm font-semibold"
+            style={{
+              background: syncBusy ? "var(--color-muted)" : "var(--grad-brand)",
+              color: "var(--color-text)",
+              cursor: syncBusy ? "not-allowed" : "pointer",
+            }}
+          >
+            {syncBusy ? "Syncing..." : "Refresh"}
+          </button>
+        </div>
+        {lastResult && (
+          <div style={{ color: "var(--color-success)", marginBottom: "0.5rem", fontSize: "0.875rem" }}>
+            {lastResult}
+          </div>
+        )}
+        {txLoading ? (
+          <div style={{ color: "var(--color-muted)" }}>Loading...</div>
+        ) : (
+          <TransactionList transactions={transactions} />
+        )}
+      </div>
     </div>
   );
 }
