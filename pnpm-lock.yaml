@@ -20,6 +20,9 @@ importers:
       firebase:
         specifier: ^12.16.0
         version: 12.16.0
+      firebase-admin:
+        specifier: ^13.10.0
+        version: 13.10.0
       next:
         specifier: 16.2.10
         version: 16.2.10(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -32,6 +35,9 @@ importers:
       react-plaid-link:
         specifier: ^4.1.1
         version: 4.1.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      stripe:
+        specifier: ^22.3.1
+        version: 22.3.1(@types/node@20.19.43)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4
@@ -4558,6 +4564,15 @@ packages:
   strip-json-comments@3.1.1:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
+
+  stripe@22.3.1:
+    resolution: {integrity: sha512-6XSLN0KK0IdfXqDHqMg6CDoO3eO62ye9dhzw0fZp55AUOzHR1YRJOqYHTsuCi4QJ4Ni/usEmXtq69c9ghKDmYw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   strnum@2.4.1:
     resolution: {integrity: sha512-M9eUSMT2dCB2cTNPG7UYj6KuK7RJR2SN2+yCV/fTW3xzTCS6EaGZ5pSMgDIjB7r8zSfTGk+dvvn9rTjpVS9Mwg==}
@@ -10300,6 +10315,10 @@ snapshots:
   strip-json-comments@2.0.1: {}
 
   strip-json-comments@3.1.1: {}
+
+  stripe@22.3.1(@types/node@20.19.43):
+    optionalDependencies:
+      '@types/node': 20.19.43
 
   strnum@2.4.1:
     dependencies:
