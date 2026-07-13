@@ -182,8 +182,14 @@ export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: B
           <button
             type="button"
             onClick={onUpgrade}
+            disabled={!onUpgrade}
             className="mt-3 rounded px-4 py-2 text-sm font-medium"
-            style={{ background: "var(--grad-brand)", color: "var(--color-text)" }}
+            style={{
+              background: "var(--grad-brand)",
+              color: "var(--color-text)",
+              opacity: onUpgrade ? 1 : 0.5,
+              cursor: onUpgrade ? "pointer" : "not-allowed",
+            }}
           >
             Upgrade to Premium
           </button>

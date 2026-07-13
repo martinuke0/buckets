@@ -19,6 +19,8 @@ export async function startCheckout(uid: string): Promise<void> {
     const { url } = await response.json();
     if (url) {
       window.location.href = url;
+    } else {
+      console.error("Checkout response missing url");
     }
   } catch (error) {
     console.error("Checkout error:", error);
