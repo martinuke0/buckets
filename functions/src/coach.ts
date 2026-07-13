@@ -2,7 +2,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
 import { buildCoachContext } from "./coachContext";
-import { validateSuggestion, type CoachReply } from "../../lib/coach/suggestion";
+import { validateSuggestion, type CoachReply, type CoachSuggestion } from "../../lib/coach/suggestion";
+import { applyRebalance } from "./store";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -117,3 +118,75 @@ export const coachReply = onCall<CoachReplyRequest>(async (request) => {
 
   return parsed;
 });
+
+interface ApplyCoachSuggestionRequest {
+  suggestion: CoachSuggestion;
+  suggestionId: string;
+}
+
+/**
+ * Callable function: Apply a coach suggestion.
+ * Validates the suggestion against fresh bucket state, then moves funds.
+ * Idempotent via suggestionId (client generates a stable id per suggestion).
+ */
+export const applyCoachSuggestion = onCall<ApplyCoachSuggestionRequest>(
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+
+    const uid = request.auth.uid;
+    const { suggestion, suggestionId } = request.data;
+
+    if (!suggestion || !suggestionId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Missing suggestion or suggestionId"
+      );
+    }
+
+    // Read user's buckets for validation
+    const db = getFirestore();
+    const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+
+    if (bucketsSnap.empty) {
+      throw new HttpsError(
+        "failed-precondition",
+        "User has no buckets configured"
+      );
+    }
+
+    const buckets = bucketsSnap.docs.map((d) => ({
+      id: d.id,
+      remaining: d.get("remaining") as number,
+    }));
+
+    // Validate suggestion against fresh bucket state
+    const validation = validateSuggestion(suggestion, buckets);
+
+    if (!validation.ok) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Invalid suggestion: ${validation.reason}`
+      );
+    }
+
+    // Apply the rebalance (transaction with idempotency + re-validation inside)
+    try {
+      await applyRebalance(
+        uid,
+        suggestion.fromBucketId,
+        suggestion.toBucketId,
+        suggestion.amount,
+        suggestionId
+      );
+    } catch (err) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Failed to apply rebalance: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    return { ok: true };
+  }
+);

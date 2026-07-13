@@ -222,3 +222,64 @@ export async function applySpendCategorization(
     });
   });
 }
+
+export async function applyRebalance(
+  uid: string,
+  fromId: string,
+  toId: string,
+  amount: number,
+  actionId: string
+): Promise<void> {
+  const db = getFirestore();
+
+  await db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    // Idempotency marker: check if this action has already been applied
+    const markerRef = db.doc(`users/${uid}/coachActions/${actionId}`);
+    const markerSnap = await tx.get(markerRef);
+
+    if (markerSnap.exists) {
+      console.log(`applyRebalance: action ${actionId} already applied, skipping`);
+      return;
+    }
+
+    // Read both buckets inside the transaction (all reads before writes)
+    const fromRef = db.doc(`users/${uid}/buckets/${fromId}`);
+    const toRef = db.doc(`users/${uid}/buckets/${toId}`);
+
+    const fromSnap = await tx.get(fromRef);
+    const toSnap = await tx.get(toRef);
+
+    if (!fromSnap.exists) {
+      throw new Error(`Source bucket '${fromId}' not found`);
+    }
+    if (!toSnap.exists) {
+      throw new Error(`Destination bucket '${toId}' not found`);
+    }
+
+    // Re-validate at apply time: source bucket must have sufficient remaining balance
+    const fromRemaining = fromSnap.get("remaining") as number;
+    if (fromRemaining < amount) {
+      throw new Error(
+        `Insufficient funds: source bucket has ${fromRemaining} cents, need ${amount} cents`
+      );
+    }
+
+    // All reads complete, now write:
+    // 1. Set marker doc (prevent double-apply)
+    tx.set(markerRef, {
+      createdAt: new Date().toISOString(),
+      fromBucketId: fromId,
+      toBucketId: toId,
+      amount,
+    });
+
+    // 2. Move funds: decrement source, increment destination
+    tx.update(fromRef, {
+      remaining: FieldValue.increment(-amount),
+    });
+
+    tx.update(toRef, {
+      remaining: FieldValue.increment(amount),
+    });
+  });
+}

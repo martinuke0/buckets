@@ -8,4 +8,4 @@ export * from "./store";
 
 // Export callable and scheduled functions
 export { createLinkToken, exchangePublicToken, syncTransactions, scheduledSync } from "./bank";
-export { coachReply } from "./coach";
+export { coachReply, applyCoachSuggestion } from "./coach";
