@@ -13,7 +13,7 @@ export function BucketCard({ bucket }: { bucket: Bucket }) {
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: pickDotColor(bucket.colorIndex) }} />
           {bucket.name}
         </span>
-        <span style={{ color: low ? "#FF5E57" : "#14F195" }}>{formatEuros(bucket.remaining)}</span>
+        <span style={{ color: low ? "var(--color-danger)" : "var(--color-success)" }}>{formatEuros(bucket.remaining)}</span>
       </div>
       <div className="mt-2 rounded" style={{ background: "var(--color-border)", height: 8 }}>
         <div style={{ width: `${pct * 100}%`, height: 8, borderRadius: 4, background: low ? "var(--grad-danger)" : "var(--grad-brand)" }} />

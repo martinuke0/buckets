@@ -25,7 +25,7 @@ export default function SignIn() {
         <p className="text-sm mb-6" style={{ color: "var(--color-muted)" }}>
           Auto-split your income. Always know what&apos;s safe to spend.
         </p>
-        {err && <p className="text-sm mb-3" style={{ color: "#FF5E57" }}>{err}</p>}
+        {err && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{err}</p>}
         <button
           className="w-full rounded-lg py-2.5 font-semibold text-white"
           style={{ background: "var(--grad-brand)" }}

@@ -79,7 +79,7 @@ export function BucketSetup({ initial, onSave }: BucketSetupProps) {
           <span className="text-sm text-white/70">Total:</span>
           <span
             data-testid="total-percent"
-            style={{ color: isValid ? "#14F195" : "#FF5E57" }}
+            style={{ color: isValid ? "var(--color-success)" : "var(--color-danger)" }}
             className="text-sm font-medium"
           >
             {total}

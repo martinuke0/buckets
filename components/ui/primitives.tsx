@@ -64,7 +64,7 @@ export function TrustBadge({
     secure: {
       background: "rgba(20, 241, 149, 0.1)",
       border: "1px solid rgba(20, 241, 149, 0.3)",
-      color: "#14F195",
+      color: "var(--color-success)",
     },
     neutral: {
       background: "var(--color-card)",

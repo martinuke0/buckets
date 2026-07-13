@@ -10,7 +10,7 @@ export function SafeToSpendHero({
       <div className="text-xs uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>Safe to spend today</div>
       <div className="flex items-baseline gap-2">
         <div className="text-3xl font-extrabold" style={{ color: "var(--color-text)" }}>{formatEuros(safeToSpend)}</div>
-        {onTrack && <div className="text-xs" style={{ color: "#14F195" }}>▲ on track</div>}
+        {onTrack && <div className="text-xs" style={{ color: "var(--color-success)" }}>▲ on track</div>}
       </div>
       <div className="mt-2 rounded" style={{ background: "var(--color-border)", height: 6 }}>
         <div style={{ width: `${Math.max(0, Math.min(1, monthProgress)) * 100}%`, height: 6, borderRadius: 3, background: "var(--grad-brand)" }} />

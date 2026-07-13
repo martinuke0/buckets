@@ -8,6 +8,8 @@
   --color-muted: #8A8F98;
   --grad-brand: linear-gradient(90deg, #9945FF, #14F195);
   --grad-danger: linear-gradient(90deg, #FF8A3D, #FF5E57);
+  --color-success: #14F195;
+  --color-danger: #FF5E57;
 }
 
 html, body { background: var(--color-base); color: var(--color-text); color-scheme: dark; }
