@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bucketCapFor, canAddBucket, resplitAdjacent, deleteBucket } from "@/lib/buckets/edit";
+import { bucketCapFor, canAddBucket, resplitAdjacent, deleteBucket, setBucketPercent } from "@/lib/buckets/edit";
 import type { Bucket } from "@/lib/model/types";
 
 const mk = (id: string, name: string, percent: number, remaining = 0): Bucket =>
@@ -25,6 +25,30 @@ describe("resplitAdjacent", () => {
     expect(out[0].percent).toBe(65);
     expect(out[1].percent).toBe(0);
     expect(out.reduce((t, b) => t + b.percent, 0)).toBe(100);
+  });
+});
+
+describe("setBucketPercent", () => {
+  const sum = (bs: Bucket[]) => bs.reduce((t, b) => t + b.percent, 0);
+
+  it("edits a non-savings bucket by re-splitting against Savings, total stays 100", () => {
+    const out = setBucketPercent(set, "rent", 40); // Rent 35->40, Savings 30->25
+    expect(out.find((b) => b.id === "rent")!.percent).toBe(40);
+    expect(out.find((b) => b.id === "sav")!.percent).toBe(25);
+    expect(sum(out)).toBe(100);
+  });
+
+  it("editing the Savings bucket itself keeps total 100 (recipient != edited)", () => {
+    const out = setBucketPercent(set, "sav", 40); // must NOT double-count Savings
+    expect(out.find((b) => b.id === "sav")!.percent).toBe(40);
+    expect(sum(out)).toBe(100); // regression guard: was 110
+  });
+
+  it("clamps so the pair can't exceed its combined percent", () => {
+    const out = setBucketPercent(set, "rent", 999); // Rent+Savings = 65
+    expect(out.find((b) => b.id === "rent")!.percent).toBe(65);
+    expect(out.find((b) => b.id === "sav")!.percent).toBe(0);
+    expect(sum(out)).toBe(100);
   });
 });
 

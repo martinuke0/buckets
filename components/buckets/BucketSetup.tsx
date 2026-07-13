@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Bucket } from "@/lib/model/types";
 import { AllocationBar } from "./AllocationBar";
 import { BucketRow } from "./BucketRow";
-import { canAddBucket, bucketCapFor, deleteBucket, resplitAdjacent } from "@/lib/buckets/edit";
+import { canAddBucket, bucketCapFor, deleteBucket, setBucketPercent } from "@/lib/buckets/edit";
 import {
   DndContext,
   closestCenter,
@@ -93,31 +93,9 @@ export function BucketSetup({ initial, premium, onSave, onDelete }: BucketSetupP
   };
 
   const handlePercentChange = (id: string, newPercent: number) => {
-    setBuckets((prev) => {
-      const editedIdx = prev.findIndex((b) => b.id === id);
-      if (editedIdx === -1) return prev;
-
-      const savingsIdx = prev.findIndex((b) => b.name.toLowerCase() === "savings");
-      const recipientIdx = savingsIdx !== -1 ? savingsIdx : prev.findIndex((b, i) => i !== editedIdx);
-
-      if (recipientIdx === -1) return prev;
-
-      const edited = prev[editedIdx];
-      const recipient = prev[recipientIdx];
-      const pairSum = edited.percent + recipient.percent;
-      const clampedNewPercent = Math.max(0, Math.min(Math.round(newPercent), pairSum));
-      const newRecipientPercent = pairSum - clampedNewPercent;
-
-      return prev.map((b, i) => {
-        if (i === editedIdx) {
-          return { ...b, percent: clampedNewPercent };
-        }
-        if (i === recipientIdx) {
-          return { ...b, percent: newRecipientPercent };
-        }
-        return b;
-      });
-    });
+    // Single source of truth: the pure helper picks a recipient excluding the edited
+    // bucket and preserves total=100 (handles editing Savings correctly).
+    setBuckets((prev) => setBucketPercent(prev, id, newPercent));
   };
 
   const handleRename = (id: string, newName: string) => {

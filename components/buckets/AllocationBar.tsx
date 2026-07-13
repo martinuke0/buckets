@@ -77,7 +77,8 @@ export function AllocationBar({ buckets, onChange }: AllocationBarProps) {
               aria-valuenow={bucket.percent}
               onPointerDown={(e) => handlePointerDown(i, e)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="absolute right-0 top-0 h-full w-2 -translate-x-1/2 cursor-ew-resize bg-white/20 hover:bg-white/40 focus:bg-white/40 focus:outline-none"
+              className="absolute right-0 top-0 h-full w-2 -translate-x-1/2 cursor-ew-resize rounded-full focus:outline-none"
+              style={{ background: "var(--color-text)", opacity: 0.5 }}
             />
           )}
         </div>
