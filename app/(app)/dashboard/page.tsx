@@ -9,6 +9,7 @@ import { BucketCard } from "@/components/buckets/BucketCard";
 import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
 import { recategorize } from "@/lib/data/recategorize";
+import { SectionLabel } from "@/components/ui/primitives";
 
 export default function Page() {
   const { buckets, loading } = useBuckets();
@@ -38,7 +39,7 @@ export default function Page() {
   const onTrack = safeToSpend > 0 && monthProgress < 0.9;
 
   return (
-    <div>
+    <div style={{ padding: "1rem" }}>
       <SafeToSpendHero
         safeToSpend={safeToSpend}
         onTrack={onTrack}
@@ -46,13 +47,15 @@ export default function Page() {
         monthProgress={monthProgress}
       />
 
-      {buckets.map((bucket) => (
-        <BucketCard key={bucket.id} bucket={bucket} />
-      ))}
+      <div style={{ marginBottom: "1rem" }}>
+        {buckets.map((bucket) => (
+          <BucketCard key={bucket.id} bucket={bucket} />
+        ))}
+      </div>
 
       <button
         onClick={() => setShowDialog(true)}
-        className="w-full rounded-lg py-3 px-4 mt-4 font-semibold"
+        className="w-full rounded-lg py-3 px-4 font-semibold"
         style={{ background: "var(--grad-brand)", color: "var(--color-text)" }}
       >
         Simulate income
@@ -65,9 +68,9 @@ export default function Page() {
         />
       )}
 
-      <div className="mt-8">
+      <div style={{ marginTop: "2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-          <h2 className="text-xl font-bold">Transactions</h2>
+          <SectionLabel>Transactions</SectionLabel>
           <button
             onClick={() => { void refresh(); }}
             disabled={syncBusy}
