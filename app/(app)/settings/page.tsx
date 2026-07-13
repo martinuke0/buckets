@@ -30,7 +30,7 @@ export default function Page() {
               {busy ? "Connecting..." : "Connect a bank"}
             </button>
             {error && (
-              <div style={{ color: "var(--color-error)", marginTop: "0.75rem", fontSize: "0.875rem" }}>
+              <div style={{ color: "var(--color-danger)", marginTop: "0.75rem", fontSize: "0.875rem" }}>
                 {error}
               </div>
             )}
@@ -71,7 +71,7 @@ export default function Page() {
                 style={{
                   padding: "0.5rem 1rem",
                   fontSize: "0.875rem",
-                  color: "var(--color-error)",
+                  color: "var(--color-danger)",
                   background: "transparent",
                   border: "1px solid var(--color-border)",
                   borderRadius: "8px",

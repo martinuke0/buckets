@@ -35,6 +35,15 @@ function getFunctionsClient() {
   return functions;
 }
 
+// Firebase callable errors surface raw codes (e.g. "internal", "unauthenticated")
+// as err.message. Never show those raw to users — map known cases, else a friendly fallback.
+function friendlyBankError(err: unknown, fallback: string): string {
+  const code = (err instanceof Error ? err.message : "").toLowerCase();
+  if (code.includes("unauthenticated")) return "Please sign in again to continue.";
+  if (code.includes("unavailable") || code.includes("deadline")) return "Couldn't reach the bank service. Please try again.";
+  return fallback; // raw Firebase codes are never shown to the user
+}
+
 export function useBankConnection(): {
   connect: () => Promise<void>;
   refresh: () => Promise<{ added: number }>;
@@ -61,7 +70,7 @@ export function useBankConnection(): {
         await exchangeFn({ publicToken });
         setLastResult("Connected successfully");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to exchange token");
+        setError(friendlyBankError(err, "Couldn't finish connecting your bank. Please try again."));
       } finally {
         setBusy(false);
       }
@@ -89,7 +98,7 @@ export function useBankConnection(): {
       // Wait for ready and open
       // Note: open will be called via useEffect when ready
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create link token");
+      setError(friendlyBankError(err, "Couldn't start the bank connection. Please try again."));
       setBusy(false);
     }
   }, [functions]);
@@ -116,7 +125,7 @@ export function useBankConnection(): {
       setLastResult(added === 0 ? "Up to date" : `${added} new`);
       return { added };
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to sync transactions");
+      setError(friendlyBankError(err, "Couldn't refresh transactions. Please try again."));
       throw err;
     } finally {
       setBusy(false);
