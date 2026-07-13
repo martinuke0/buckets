@@ -1,5 +1,6 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { splitIncome, type SplitRule } from "../../lib/split/engine";
+import type { CategoryRule } from "../../lib/categorize/rules";
 
 // NormalizedTxn type copied from lib/bank/provider to avoid fragile cross-package import
 export interface NormalizedTxn {
@@ -159,4 +160,65 @@ export async function listConnectedUsers(): Promise<string[]> {
   const db = getFirestore();
   const snap = await db.collection("bankConnections").get();
   return snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => d.id);
+}
+
+export async function getCategoryRules(uid: string): Promise<CategoryRule[]> {
+  const db = getFirestore();
+  const snap = await db.collection(`categoryRules/${uid}/rules`).get();
+  return snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+    merchant: d.id,
+    bucketId: d.get("bucketId") as string,
+  }));
+}
+
+export async function saveCategoryRule(
+  uid: string,
+  merchant: string,
+  bucketId: string
+): Promise<void> {
+  const db = getFirestore();
+  await db.doc(`categoryRules/${uid}/rules/${merchant}`).set({ bucketId });
+}
+
+export async function applySpendCategorization(
+  uid: string,
+  txnId: string,
+  bucketId: string,
+  magnitude: number
+): Promise<void> {
+  const db = getFirestore();
+
+  await db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    // Read before write: check if this transaction is already categorized
+    const txnRef = db.doc(`users/${uid}/transactions/${txnId}`);
+    const txnSnap = await tx.get(txnRef);
+
+    if (!txnSnap.exists) {
+      console.log(`applySpendCategorization: txn ${txnId} not found, skipping`);
+      return;
+    }
+
+    const existingBucketId = txnSnap.get("bucketId");
+    const categorizedAt = txnSnap.get("categorizedAt");
+
+    // Idempotency gate: if already categorized to this bucket, no-op
+    if (categorizedAt && existingBucketId === bucketId) {
+      console.log(
+        `applySpendCategorization: txn ${txnId} already categorized to ${bucketId}, skipping`
+      );
+      return;
+    }
+
+    // Set transaction bucketId + categorizedAt marker
+    tx.update(txnRef, {
+      bucketId,
+      categorizedAt: new Date().toISOString(),
+    });
+
+    // Decrement bucket remaining (magnitude is positive, spend draws down)
+    const bucketRef = db.doc(`users/${uid}/buckets/${bucketId}`);
+    tx.update(bucketRef, {
+      remaining: FieldValue.increment(-magnitude),
+    });
+  });
 }

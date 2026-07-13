@@ -5,8 +5,13 @@ import {
   saveCursor,
   writeTransactions,
   applyIncomeAdmin,
+  getCategoryRules,
+  applySpendCategorization,
   type NormalizedTxn,
 } from "./store";
+import { chooseBucket } from "../../lib/categorize/rules";
+import { categorizeWithGemini } from "./categorizer";
+import { getFirestore } from "firebase-admin/firestore";
 
 // Build Plaid client from environment variables
 function createPlaidAdapter(): PlaidAdapter {
@@ -69,12 +74,56 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   // Write all collected transactions, returns only newly-created ones
   const created = await writeTransactions(uid, allAdded);
 
-  // Auto-split each newly-created income transaction into buckets
+  // Load category rules and bucket IDs once per run
+  const rules = await getCategoryRules(uid);
+  const db = getFirestore();
+  const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+  const bucketIds = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => d.id);
+  const bucketDocs = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+    id: d.id,
+    name: d.get("name") as string,
+  }));
+
+  // Categorization counters
+  let ruleHits = 0;
+  let geminiHits = 0;
+  let noMatch = 0;
+
+  // Process each newly-created transaction
   for (const txn of created) {
     if (txn.isIncome) {
+      // Income: auto-split only (existing path)
       await applyIncomeAdmin(uid, txn.amount, txn.providerTxnId);
+    } else {
+      // Spends: categorize via rules → Gemini
+      const decision = chooseBucket(txn.description, rules, bucketIds);
+
+      let bucketId: string | null = null;
+      if ("bucketId" in decision) {
+        bucketId = decision.bucketId;
+        ruleHits++;
+      } else {
+        // Fallback to Gemini
+        const geminiResult = await categorizeWithGemini(txn.description, bucketDocs);
+        bucketId = geminiResult.bucketId;
+        if (bucketId) {
+          geminiHits++;
+        } else {
+          noMatch++;
+        }
+      }
+
+      // Apply categorization if we have a bucket
+      if (bucketId) {
+        const magnitude = Math.abs(txn.amount);
+        await applySpendCategorization(uid, txn.providerTxnId, bucketId, magnitude);
+      }
     }
   }
+
+  console.log(
+    `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch}`
+  );
 
   return { added: created.length };
 }
