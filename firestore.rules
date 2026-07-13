@@ -5,7 +5,16 @@ service cloud.firestore {
     // Only the Functions admin SDK (which bypasses rules) may read/write access tokens.
 
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && request.auth.uid == uid;
+      // `premium` is server-authoritative: only the Stripe webhook (admin SDK, which
+      // bypasses rules) may set it. The client may create/update its own user doc but
+      // must NEVER write a `premium` field — this blocks a client self-granting premium.
+      // Guards both create (resource == null) and update paths.
+      allow create: if request.auth != null && request.auth.uid == uid
+        && !("premium" in request.resource.data);
+      allow update: if request.auth != null && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['premium']);
+      allow delete: if request.auth != null && request.auth.uid == uid;
       match /{sub=**} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
