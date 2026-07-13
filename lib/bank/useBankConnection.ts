@@ -2,8 +2,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { usePlaidLink, type PlaidLinkOptions } from "react-plaid-link";
 import { httpsCallable } from "firebase/functions";
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
-import { getFirebaseApp } from "@/lib/firebase/client";
+import { getBankFunctions } from "./functionsClient";
+import { friendlyBankError, useBankSync } from "./useBankSync";
 
 interface CreateLinkTokenResponse {
   linkToken: string;
@@ -13,37 +13,9 @@ interface ExchangePublicTokenRequest {
   publicToken: string;
 }
 
-interface SyncTransactionsResponse {
-  added: number;
-}
-
-let emulatorConnected = false;
-
-function getFunctionsClient() {
-  const functions = getFunctions(getFirebaseApp());
-
-  // Connect to emulator in dev (only once)
-  if (process.env.NODE_ENV === "development" && !emulatorConnected) {
-    try {
-      connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-      emulatorConnected = true;
-    } catch (e) {
-      // Already connected or error, ignore
-    }
-  }
-
-  return functions;
-}
-
-// Firebase callable errors surface raw codes (e.g. "internal", "unauthenticated")
-// as err.message. Never show those raw to users — map known cases, else a friendly fallback.
-function friendlyBankError(err: unknown, fallback: string): string {
-  const code = (err instanceof Error ? err.message : "").toLowerCase();
-  if (code.includes("unauthenticated")) return "Please sign in again to continue.";
-  if (code.includes("unavailable") || code.includes("deadline")) return "Couldn't reach the bank service. Please try again.";
-  return fallback; // raw Firebase codes are never shown to the user
-}
-
+// Full bank-connection hook: Plaid Link connect flow + refresh. Mount this ONCE
+// (on Settings), not app-wide — usePlaidLink embeds Plaid's script. For a
+// refresh-only surface (e.g. the nav Sync button), use useBankSync instead.
 export function useBankConnection(): {
   connect: () => Promise<void>;
   refresh: () => Promise<{ added: number }>;
@@ -53,57 +25,44 @@ export function useBankConnection(): {
 } {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [lastResult, setLastResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const functions = getFunctionsClient();
+  const functions = getBankFunctions();
+  // Reuse the sync-only hook for refresh + its lastResult (single source of truth).
+  const { refresh, busy: syncBusy, lastResult, error: syncError } = useBankSync();
 
   const onSuccess = useCallback(
     async (publicToken: string) => {
       try {
         setBusy(true);
         setError(null);
-        const exchangeFn = httpsCallable<ExchangePublicTokenRequest, void>(
-          functions,
-          "exchangePublicToken"
-        );
+        const exchangeFn = httpsCallable<ExchangePublicTokenRequest, void>(functions, "exchangePublicToken");
         await exchangeFn({ publicToken });
-        setLastResult("Connected successfully");
       } catch (err) {
         setError(friendlyBankError(err, "Couldn't finish connecting your bank. Please try again."));
       } finally {
         setBusy(false);
       }
     },
-    [functions]
+    [functions],
   );
 
-  const config: PlaidLinkOptions = {
-    token: linkToken || "",
-    onSuccess,
-  };
-
+  const config: PlaidLinkOptions = { token: linkToken || "", onSuccess };
   const { open, ready } = usePlaidLink(config);
 
   const connect = useCallback(async () => {
     try {
       setBusy(true);
       setError(null);
-      const createLinkTokenFn = httpsCallable<void, CreateLinkTokenResponse>(
-        functions,
-        "createLinkToken"
-      );
+      const createLinkTokenFn = httpsCallable<void, CreateLinkTokenResponse>(functions, "createLinkToken");
       const result = await createLinkTokenFn();
       setLinkToken(result.data.linkToken);
-      // Wait for ready and open
-      // Note: open will be called via useEffect when ready
     } catch (err) {
       setError(friendlyBankError(err, "Couldn't start the bank connection. Please try again."));
       setBusy(false);
     }
   }, [functions]);
 
-  // Open Plaid Link when ready
   useEffect(() => {
     if (ready && linkToken) {
       open();
@@ -111,32 +70,11 @@ export function useBankConnection(): {
     }
   }, [ready, linkToken, open]);
 
-  const refresh = useCallback(async () => {
-    try {
-      setBusy(true);
-      setError(null);
-      setLastResult(null);
-      const syncFn = httpsCallable<void, SyncTransactionsResponse>(
-        functions,
-        "syncTransactions"
-      );
-      const result = await syncFn();
-      const added = result.data.added;
-      setLastResult(added === 0 ? "Up to date" : `${added} new`);
-      return { added };
-    } catch (err) {
-      setError(friendlyBankError(err, "Couldn't refresh transactions. Please try again."));
-      throw err;
-    } finally {
-      setBusy(false);
-    }
-  }, [functions]);
-
   return {
     connect,
     refresh,
-    busy,
+    busy: busy || syncBusy,
     lastResult,
-    error,
+    error: error ?? syncError,
   };
 }

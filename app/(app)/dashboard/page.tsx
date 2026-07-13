@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
-import { useBankConnection } from "@/lib/bank/useBankConnection";
+import { useBankSync } from "@/lib/bank/useBankSync";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
@@ -14,7 +14,7 @@ import { SectionLabel } from "@/components/ui/primitives";
 export default function Page() {
   const { buckets, loading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
-  const { refresh, busy: syncBusy, lastResult, error } = useBankConnection();
+  const { refresh, busy: syncBusy, lastResult, error } = useBankSync();
   const { user } = useAuth();
   const [showDialog, setShowDialog] = useState(false);
 

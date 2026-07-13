@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { AppShell } from "@/components/ui/AppShell";
 import { BottomTabBar } from "@/components/nav/BottomTabBar";
-import { useBankConnection } from "@/lib/bank/useBankConnection";
+import { useBankSync } from "@/lib/bank/useBankSync";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const { refresh } = useBankConnection();
+  const { refresh } = useBankSync();
   const router = useRouter();
   useEffect(() => { if (!loading && !user) router.replace("/sign-in"); }, [loading, user, router]);
   if (loading || !user) return <div className="p-6" style={{ color: "var(--color-muted)" }}>Loading…</div>;
