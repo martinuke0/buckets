@@ -1,7 +1,7 @@
 "use client";
 import { BucketSetup } from "@/components/buckets/BucketSetup";
 import { useBuckets } from "@/lib/data/useBuckets";
-import { saveBuckets } from "@/lib/data/buckets";
+import { saveBuckets, deleteBucketAndRedistribute } from "@/lib/data/buckets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { Bucket } from "@/lib/model/types";
 import { SectionLabel } from "@/components/ui/primitives";
@@ -27,6 +27,9 @@ export default function Page() {
       ? buckets
       : DEFAULT_BUCKETS.map((b) => ({ ...b, id: crypto.randomUUID() }));
 
+  // TODO(billing): usePremium — Task 6 wires it
+  const premium = false;
+
   return (
     <div style={{ padding: "1rem", maxWidth: "42rem", margin: "0 auto" }}>
       <div style={{ marginBottom: "1.5rem" }}>
@@ -34,7 +37,9 @@ export default function Page() {
       </div>
       <BucketSetup
         initial={initial}
+        premium={premium}
         onSave={(b) => user && saveBuckets(user.uid, b)}
+        onDelete={(id) => user && deleteBucketAndRedistribute(user.uid, id)}
       />
     </div>
   );
