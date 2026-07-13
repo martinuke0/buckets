@@ -1,4 +1,4 @@
-import type { Bucket } from "@/lib/model/types";
+import type { Bucket } from "../model/types";
 
 export function bucketCapFor(premium: boolean): number {
   return premium ? 15 : 5;

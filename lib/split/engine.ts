@@ -1,4 +1,4 @@
-import type { Cents } from "@/lib/model/money";
+import type { Cents } from "../model/money";
 
 export interface SplitRule {
   bucketId: string;

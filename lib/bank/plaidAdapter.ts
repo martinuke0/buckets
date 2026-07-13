@@ -1,5 +1,5 @@
-import { toCents } from "@/lib/model/money";
-import type { BankProvider, NormalizedTxn } from "@/lib/bank/provider";
+import { toCents } from "../model/money";
+import type { BankProvider, NormalizedTxn } from "./provider";
 
 export interface PlaidLikeTxn {
   transaction_id: string;

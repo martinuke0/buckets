@@ -6,7 +6,7 @@
   "engines": {
     "node": "20"
   },
-  "main": "lib/index.js",
+  "main": "lib/functions/src/index.js",
   "scripts": {
     "build": "tsc",
     "serve": "pnpm run build && firebase emulators:start --only functions",
