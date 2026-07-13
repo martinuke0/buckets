@@ -3,15 +3,18 @@ import { useState } from "react";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
 import { useBankConnection } from "@/lib/bank/useBankConnection";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
 import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
+import { recategorize } from "@/lib/data/recategorize";
 
 export default function Page() {
   const { buckets, loading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
   const { refresh, busy: syncBusy, lastResult, error } = useBankConnection();
+  const { user } = useAuth();
   const [showDialog, setShowDialog] = useState(false);
 
   if (loading) {
@@ -91,7 +94,16 @@ export default function Page() {
         {txLoading ? (
           <div style={{ color: "var(--color-muted)" }}>Loading...</div>
         ) : (
-          <TransactionList transactions={transactions} />
+          <TransactionList
+            transactions={transactions}
+            buckets={buckets}
+            onRecategorize={(txnId, bucketId) => {
+              const txn = transactions.find((t) => t.id === txnId);
+              if (txn && user) {
+                void recategorize(user.uid, txn, bucketId, buckets);
+              }
+            }}
+          />
         )}
       </div>
     </div>
