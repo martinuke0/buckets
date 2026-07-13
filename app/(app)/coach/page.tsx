@@ -1,5 +1,9 @@
 import { Card, SectionLabel } from "@/components/ui/primitives";
 
+// TODO(billing): When Coach is implemented, gate with usePremium():
+// const { premium, loading } = usePremium();
+// if (loading) → spinner; if (!premium) → <UpgradeCard onUpgrade={...} />; else → Coach chat.
+
 export default function Page() {
   return (
     <div style={{ padding: "1rem" }}>

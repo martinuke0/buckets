@@ -27,6 +27,7 @@ interface BucketSetupProps {
   premium: boolean;
   onSave: (buckets: Bucket[]) => void;
   onDelete: (id: string) => void;
+  onUpgrade?: () => void;
 }
 
 function SortableBucketRow({
@@ -65,7 +66,7 @@ function SortableBucketRow({
   );
 }
 
-export function BucketSetup({ initial, premium, onSave, onDelete }: BucketSetupProps) {
+export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: BucketSetupProps) {
   const [buckets, setBuckets] = useState<Bucket[]>(initial);
 
   const sensors = useSensors(
@@ -180,6 +181,7 @@ export function BucketSetup({ initial, premium, onSave, onDelete }: BucketSetupP
           </div>
           <button
             type="button"
+            onClick={onUpgrade}
             className="mt-3 rounded px-4 py-2 text-sm font-medium"
             style={{ background: "var(--grad-brand)", color: "var(--color-text)" }}
           >

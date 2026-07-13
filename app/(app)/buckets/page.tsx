@@ -3,6 +3,8 @@ import { BucketSetup } from "@/components/buckets/BucketSetup";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { saveBuckets, deleteBucketAndRedistribute } from "@/lib/data/buckets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { usePremium } from "@/lib/billing/usePremium";
+import { startCheckout } from "@/lib/billing/startCheckout";
 import type { Bucket } from "@/lib/model/types";
 import { SectionLabel } from "@/components/ui/primitives";
 
@@ -17,6 +19,7 @@ const DEFAULT_BUCKETS: Omit<Bucket, "id">[] = [
 export default function Page() {
   const { user } = useAuth();
   const { buckets, loading } = useBuckets();
+  const { premium } = usePremium();
 
   if (loading) {
     return <div className="text-white/50">Loading…</div>;
@@ -26,9 +29,6 @@ export default function Page() {
     buckets.length > 0
       ? buckets
       : DEFAULT_BUCKETS.map((b) => ({ ...b, id: crypto.randomUUID() }));
-
-  // TODO(billing): usePremium — Task 6 wires it
-  const premium = false;
 
   return (
     <div style={{ padding: "1rem", maxWidth: "42rem", margin: "0 auto" }}>
@@ -40,6 +40,7 @@ export default function Page() {
         premium={premium}
         onSave={(b) => user && saveBuckets(user.uid, b)}
         onDelete={(id) => user && deleteBucketAndRedistribute(user.uid, id)}
+        onUpgrade={() => user && startCheckout(user.uid)}
       />
     </div>
   );
