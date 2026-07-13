@@ -11,7 +11,7 @@ import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
 export default function Page() {
   const { buckets, loading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
-  const { refresh, busy: syncBusy, lastResult } = useBankConnection();
+  const { refresh, busy: syncBusy, lastResult, error } = useBankConnection();
   const [showDialog, setShowDialog] = useState(false);
 
   if (loading) {
@@ -66,7 +66,7 @@ export default function Page() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 className="text-xl font-bold">Transactions</h2>
           <button
-            onClick={refresh}
+            onClick={() => { void refresh(); }}
             disabled={syncBusy}
             className="rounded-lg py-2 px-3 text-sm font-semibold"
             style={{
@@ -78,6 +78,11 @@ export default function Page() {
             {syncBusy ? "Syncing..." : "Refresh"}
           </button>
         </div>
+        {error && (
+          <div style={{ color: "var(--color-danger)", marginBottom: "0.5rem", fontSize: "0.875rem" }}>
+            {error}
+          </div>
+        )}
         {lastResult && (
           <div style={{ color: "var(--color-success)", marginBottom: "0.5rem", fontSize: "0.875rem" }}>
             {lastResult}

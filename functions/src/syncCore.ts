@@ -72,7 +72,7 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   // Auto-split each newly-created income transaction into buckets
   for (const txn of created) {
     if (txn.isIncome) {
-      await applyIncomeAdmin(uid, txn.amount);
+      await applyIncomeAdmin(uid, txn.amount, txn.providerTxnId);
     }
   }
 

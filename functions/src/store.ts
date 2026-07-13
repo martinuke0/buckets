@@ -84,48 +84,65 @@ export async function writeTransactions(
 
 export async function applyIncomeAdmin(
   uid: string,
-  income: number
+  income: number,
+  incomeTxId: string
 ): Promise<void> {
   const db = getFirestore();
 
-  // Read user's buckets
-  const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+  // Use a deterministic marker doc for idempotency
+  const markerRef = db.doc(`users/${uid}/incomeSplits/${incomeTxId}`);
 
-  if (bucketsSnap.empty) {
-    console.log(`applyIncomeAdmin: user ${uid} has no buckets, skipping`);
-    return;
-  }
-
-  const rules: SplitRule[] = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
-    bucketId: d.id,
-    percent: d.get("percent") as number,
-  }));
-
-  // Validate percents sum to 100
-  const total = rules.reduce((sum, r) => sum + r.percent, 0);
-  if (Math.abs(total - 100) >= 0.001) {
-    console.log(
-      `applyIncomeAdmin: user ${uid} bucket percents sum to ${total}, not 100; skipping`
-    );
-    return;
-  }
-
-  // Split the income using the shared engine
-  let splits;
-  try {
-    splits = splitIncome(income, rules);
-  } catch (err) {
-    console.error(`applyIncomeAdmin: splitIncome failed for user ${uid}:`, err);
-    return;
-  }
-
-  // Write allocations and increment buckets in a transaction
   await db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    // Check if this income has already been split (idempotency gate)
+    const markerSnap = await tx.get(markerRef);
+    if (markerSnap.exists) {
+      console.log(`applyIncomeAdmin: income ${incomeTxId} already split, skipping`);
+      return;
+    }
+
+    // Read user's buckets inside the transaction
+    const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+
+    if (bucketsSnap.empty) {
+      console.log(`applyIncomeAdmin: user ${uid} has no buckets, skipping`);
+      return;
+    }
+
+    const rules: SplitRule[] = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+      bucketId: d.id,
+      percent: d.get("percent") as number,
+    }));
+
+    // Validate percents sum to 100
+    const total = rules.reduce((sum, r) => sum + r.percent, 0);
+    if (Math.abs(total - 100) >= 0.001) {
+      console.log(
+        `applyIncomeAdmin: user ${uid} bucket percents sum to ${total}, not 100; skipping`
+      );
+      return;
+    }
+
+    // Split the income using the shared engine
+    let splits;
+    try {
+      splits = splitIncome(income, rules);
+    } catch (err) {
+      console.error(`applyIncomeAdmin: splitIncome failed for user ${uid}:`, err);
+      return;
+    }
+
+    // Write marker doc (prevent double-split)
+    tx.set(markerRef, {
+      createdAt: new Date().toISOString(),
+    });
+
+    // Write allocations and increment buckets
     for (const s of splits) {
       const allocRef = db.collection(`users/${uid}/allocations`).doc();
       tx.set(allocRef, {
         bucketId: s.bucketId,
         amount: s.amount,
+        incomeTxId,
         createdAt: new Date().toISOString(),
       });
 
