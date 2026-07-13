@@ -52,7 +52,7 @@ export function TransactionList({ transactions, buckets, onRecategorize }: Props
                     padding: "0.25rem 0.5rem",
                     borderRadius: "0.25rem",
                     border: "1px solid var(--color-border)",
-                    background: "var(--color-bg)",
+                    background: "var(--color-card)",
                     color: "var(--color-text)",
                     fontSize: "0.875rem",
                   }}
