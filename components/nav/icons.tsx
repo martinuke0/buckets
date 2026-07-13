@@ -1,4 +1,6 @@
-export function HomeIcon({ className, color }: { className?: string; color?: string }) {
+export type IconProps = { className?: string; color?: string };
+
+export function HomeIcon({ className, color }: IconProps) {
   return (
     <svg
       className={className}

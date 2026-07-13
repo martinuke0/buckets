@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HomeIcon, BucketsIcon, CoachIcon, SettingsIcon, SyncIcon } from "./icons";
+import { HomeIcon, BucketsIcon, CoachIcon, SettingsIcon, SyncIcon, type IconProps } from "./icons";
+import type { ComponentType } from "react";
 
 const TABS = [
   { href: "/dashboard", label: "Home", Icon: HomeIcon },
@@ -69,7 +70,7 @@ export function BottomTabBar({ onSync }: BottomTabBarProps) {
   );
 }
 
-function NavLink({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) {
+function NavLink({ href, label, Icon, active }: { href: string; label: string; Icon: ComponentType<IconProps>; active: boolean }) {
   return (
     <Link
       href={href}
