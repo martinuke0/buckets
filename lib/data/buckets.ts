@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDocs, writeBatch, runTransaction, increment, deleteDoc,
+  collection, doc, getDocs, writeBatch, runTransaction, increment,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase/client";
 import { bucketsCol, txCol, allocationsCol } from "@/lib/model/paths";
@@ -71,56 +71,50 @@ export async function applySpend(uid: string, bucketId: string, amount: Cents): 
 }
 
 export async function deleteBucketAndRedistribute(uid: string, bucketId: string): Promise<void> {
-  const buckets = await listBuckets(uid);
-
-  // Compute the target bucket set using the pure deleteBucket function
-  const updatedBuckets = deleteBucket(buckets, bucketId);
-
-  // Find the deleted bucket and the recipient bucket
-  const deletedBucket = buckets.find((b) => b.id === bucketId);
-  if (!deletedBucket) {
-    // Idempotent: if the bucket is already gone, no-op
-    return;
-  }
-
-  // Find the recipient bucket (the one that received the folded values)
-  const savingsCandidate = buckets.find(
-    (b) => b.id !== bucketId && b.name.toLowerCase() === "savings"
-  );
-  const recipientBucket = savingsCandidate || buckets.find((b) => b.id !== bucketId);
-
-  if (!recipientBucket) {
-    throw new Error("No recipient bucket found");
-  }
-
-  // Get the updated recipient from the computed set
-  const updatedRecipient = updatedBuckets.find((b) => b.id === recipientBucket.id);
-  if (!updatedRecipient) {
-    throw new Error("Recipient bucket not found in updated set");
-  }
+  // Pre-transaction: get bucket IDs to know which docs to fetch in the transaction
+  const bucketIds = (await listBuckets(uid)).map((b) => b.id);
 
   const db = getDb();
   await runTransaction(db, async (tx) => {
-    // Read-before-write: read both affected documents first
     const deletedRef = doc(db, bucketsCol(uid), bucketId);
-    const recipientRef = doc(db, bucketsCol(uid), recipientBucket.id);
 
+    // Step 1: Check if the bucket to delete exists (idempotent)
     const deletedSnap = await tx.get(deletedRef);
-    const recipientSnap = await tx.get(recipientRef);
-
-    // Idempotent: if the bucket doc no longer exists, no-op
     if (!deletedSnap.exists()) {
       return;
     }
 
-    if (!recipientSnap.exists()) {
-      throw new Error("Recipient bucket document does not exist");
+    // Step 2: Read all bucket docs transactionally
+    const bucketRefs = bucketIds.map((id) => doc(db, bucketsCol(uid), id));
+    const bucketSnaps = await Promise.all(bucketRefs.map((ref) => tx.get(ref)));
+
+    // Build current buckets from in-transaction snapshots
+    const currentBuckets: Bucket[] = bucketSnaps
+      .filter((snap) => snap.exists())
+      .map((snap) => ({ id: snap.id, ...(snap.data() as Omit<Bucket, "id">) }));
+
+    // Step 3: Compute the fold using in-transaction data
+    const updatedBuckets = deleteBucket(currentBuckets, bucketId);
+
+    // Step 4: Determine the recipient (same logic as the pure deleteBucket uses)
+    const savingsCandidate = currentBuckets.find(
+      (b) => b.id !== bucketId && b.name.toLowerCase() === "savings"
+    );
+    const recipientBucket = savingsCandidate || currentBuckets.find((b) => b.id !== bucketId);
+
+    if (!recipientBucket) {
+      throw new Error("No recipient bucket found");
     }
 
-    // Delete the bucket document
-    tx.delete(deletedRef);
+    // Get the updated recipient from the computed set
+    const updatedRecipient = updatedBuckets.find((b) => b.id === recipientBucket.id);
+    if (!updatedRecipient) {
+      throw new Error("Recipient bucket not found in updated set");
+    }
 
-    // Update the recipient bucket with the folded values
+    // Step 5: Write phase (all reads complete before any writes)
+    const recipientRef = doc(db, bucketsCol(uid), recipientBucket.id);
+    tx.delete(deletedRef);
     tx.update(recipientRef, {
       percent: updatedRecipient.percent,
       remaining: updatedRecipient.remaining,
