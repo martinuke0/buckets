@@ -3,16 +3,13 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
-import { useAuth } from "@/lib/auth/AuthProvider";
 import { TransactionList } from "@/components/tx/TransactionList";
-import { recategorize } from "@/lib/data/recategorize";
 import { formatEuros } from "@/lib/model/money";
 import { pickDotColor } from "@/lib/theme";
 
 export default function BucketDetailPage() {
   const params = useParams();
   const bucketId = params.id as string;
-  const { user } = useAuth();
   const { buckets, loading: bucketsLoading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
 
@@ -118,16 +115,7 @@ export default function BucketDetailPage() {
             No transactions in this bucket yet.
           </div>
         ) : (
-          <TransactionList
-            transactions={filteredTransactions}
-            buckets={buckets}
-            onRecategorize={(txnId, newBucketId) => {
-              const txn = transactions.find((t) => t.id === txnId);
-              if (txn && user) {
-                void recategorize(user.uid, txn, newBucketId, buckets);
-              }
-            }}
-          />
+          <TransactionList transactions={filteredTransactions} />
         )}
       </div>
     </div>

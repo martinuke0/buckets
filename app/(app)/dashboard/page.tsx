@@ -5,12 +5,10 @@ import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
 import { useBankSync } from "@/lib/bank/useBankSync";
 import { useBankStatus } from "@/lib/data/useBankStatus";
-import { useAuth } from "@/lib/auth/AuthProvider";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
 import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
-import { recategorize } from "@/lib/data/recategorize";
 import { SectionLabel } from "@/components/ui/primitives";
 
 // Coarse "x ago" for the bank status line. Display-only; minute granularity is fine.
@@ -29,7 +27,6 @@ export default function Page() {
   const { transactions, loading: txLoading } = useTransactions();
   const { refresh, busy: syncBusy, lastResult, error } = useBankSync();
   const { status: bankStatus } = useBankStatus();
-  const { user } = useAuth();
   const [showDialog, setShowDialog] = useState(false);
 
   if (loading) {
@@ -133,16 +130,7 @@ export default function Page() {
         {txLoading ? (
           <div style={{ color: "var(--color-muted)" }}>Loading...</div>
         ) : (
-          <TransactionList
-            transactions={transactions}
-            buckets={buckets}
-            onRecategorize={(txnId, bucketId) => {
-              const txn = transactions.find((t) => t.id === txnId);
-              if (txn && user) {
-                void recategorize(user.uid, txn, bucketId, buckets);
-              }
-            }}
-          />
+          <TransactionList transactions={transactions} />
         )}
       </div>
     </div>

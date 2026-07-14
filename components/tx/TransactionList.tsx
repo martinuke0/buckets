@@ -1,13 +1,17 @@
-import type { Transaction, Bucket } from "@/lib/model/types";
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import type { Transaction } from "@/lib/model/types";
 import { formatEuros } from "@/lib/model/money";
 
 interface Props {
   transactions: Transaction[];
-  buckets?: Bucket[];
-  onRecategorize?: (txnId: string, bucketId: string) => void;
+  pageSize?: number;
 }
 
-export function TransactionList({ transactions, buckets, onRecategorize }: Props) {
+export function TransactionList({ transactions, pageSize = 20 }: Props) {
+  const [visible, setVisible] = useState(pageSize);
+
   if (transactions.length === 0) {
     return (
       <div style={{ color: "var(--color-muted)", padding: "2rem", textAlign: "center" }}>
@@ -16,18 +20,16 @@ export function TransactionList({ transactions, buckets, onRecategorize }: Props
     );
   }
 
-  const showRecategorize = buckets && onRecategorize;
+  const shown = transactions.slice(0, visible);
 
   return (
     <div>
-      {transactions.map((tx) => {
-        const isPositive = tx.amount > 0;
-        const amountColor = isPositive ? "var(--color-success)" : "var(--color-muted)";
-        const isSpend = !tx.isIncome;
-
+      {shown.map((tx) => {
+        const amountColor = tx.amount > 0 ? "var(--color-success)" : "var(--color-muted)";
         return (
-          <div
+          <Link
             key={tx.id}
+            href={`/dashboard/tx/${tx.id}`}
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -35,42 +37,29 @@ export function TransactionList({ transactions, buckets, onRecategorize }: Props
               padding: "0.75rem 0",
               borderBottom: "1px solid var(--color-border)",
               color: "var(--color-text)",
+              textDecoration: "none",
             }}
+            className="hover:opacity-80"
           >
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 500 }}>{tx.description}</div>
-              <div style={{ fontSize: "0.875rem", color: "var(--color-muted)" }}>
-                {tx.bookedAt}
-              </div>
-              {showRecategorize && isSpend && (
-                <select
-                  data-testid={`recat-${tx.id}`}
-                  value={tx.bucketId || ""}
-                  onChange={(e) => onRecategorize(tx.id, e.target.value)}
-                  style={{
-                    marginTop: "0.5rem",
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: "0.25rem",
-                    border: "1px solid var(--color-border)",
-                    background: "var(--color-card)",
-                    color: "var(--color-text)",
-                    fontSize: "0.875rem",
-                  }}
-                >
-                  {buckets.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <div style={{ fontSize: "0.875rem", color: "var(--color-muted)" }}>{tx.bookedAt}</div>
             </div>
-            <div style={{ fontWeight: 600, color: amountColor }}>
-              {formatEuros(tx.amount)}
-            </div>
-          </div>
+            <div style={{ fontWeight: 600, color: amountColor }}>{formatEuros(tx.amount)}</div>
+          </Link>
         );
       })}
+
+      {visible < transactions.length && (
+        <button
+          type="button"
+          onClick={() => setVisible((v) => v + pageSize)}
+          className="w-full rounded-lg py-2 px-3 text-sm font-semibold mt-3"
+          style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)", cursor: "pointer" }}
+        >
+          Load more
+        </button>
+      )}
     </div>
   );
 }
