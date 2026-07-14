@@ -1,6 +1,7 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { splitIncome, type SplitRule } from "../../lib/split/engine";
 import type { CategoryRule } from "../../lib/categorize/rules";
+import { DEFAULT_BUCKETS } from "./defaultBuckets";
 
 // NormalizedTxn type copied from lib/bank/provider to avoid fragile cross-package import
 export interface NormalizedTxn {
@@ -9,6 +10,23 @@ export interface NormalizedTxn {
   description: string;
   bookedAt: string;    // ISO date (YYYY-MM-DD)
   isIncome: boolean;
+}
+
+// Create the default bucket set for a user who has none. Called on first bank
+// connection so the immediate sync can split income. No-op if buckets exist.
+export async function seedDefaultBucketsIfEmpty(uid: string): Promise<boolean> {
+  const db = getFirestore();
+  const col = db.collection(`users/${uid}/buckets`);
+  const snap = await col.get();
+  if (!snap.empty) {
+    return false;
+  }
+  const batch = db.batch();
+  for (const b of DEFAULT_BUCKETS) {
+    batch.set(col.doc(), b);
+  }
+  await batch.commit();
+  return true;
 }
 
 export async function saveConnection(
