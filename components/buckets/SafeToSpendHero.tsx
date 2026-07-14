@@ -7,7 +7,7 @@ export function SafeToSpendHero({
   return (
     <div className="rounded-2xl p-5 mb-4"
       style={{ background: "radial-gradient(130% 130% at 0% 0%, rgba(153,69,255,.28), transparent 60%), var(--color-card)", border: "1px solid var(--color-border)" }}>
-      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>Safe to spend today</div>
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>Safe to spend</div>
       <div className="flex items-baseline gap-2">
         <div className="text-3xl font-extrabold" style={{ color: "var(--color-text)" }}>{formatEuros(safeToSpend)}</div>
         {onTrack && <div className="text-xs" style={{ color: "var(--color-success)" }}>▲ on track</div>}
