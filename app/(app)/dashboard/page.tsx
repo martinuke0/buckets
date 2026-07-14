@@ -9,6 +9,7 @@ import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
 import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
+import { SimulatePaymentDialog } from "./SimulatePaymentDialog";
 import { SectionLabel } from "@/components/ui/primitives";
 
 // Coarse "x ago" for the bank status line. Display-only; minute granularity is fine.
@@ -28,6 +29,7 @@ export default function Page() {
   const { refresh, busy: syncBusy, lastResult, error } = useBankSync();
   const { status: bankStatus } = useBankStatus();
   const [showDialog, setShowDialog] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   if (loading) {
     return (
@@ -75,11 +77,25 @@ export default function Page() {
         Simulate income
       </button>
 
+      {process.env.NODE_ENV === "development" && (
+        <button
+          onClick={() => setShowPayment(true)}
+          className="w-full rounded-lg py-3 px-4 font-semibold mt-2"
+          style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+        >
+          Simulate payment (dev)
+        </button>
+      )}
+
       {showDialog && (
         <SimulateIncomeDialog
           buckets={buckets}
           onClose={() => setShowDialog(false)}
         />
+      )}
+
+      {showPayment && (
+        <SimulatePaymentDialog buckets={buckets} onClose={() => setShowPayment(false)} />
       )}
 
       <div style={{ marginTop: "2rem" }}>
