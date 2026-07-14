@@ -1,16 +1,21 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
 import { useBankSync } from "@/lib/bank/useBankSync";
 import { useBankStatus } from "@/lib/data/useBankStatus";
+import { usePendingIncome } from "@/lib/data/pendingIncome";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
 import { TransactionList } from "@/components/tx/TransactionList";
 import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
 import { SimulatePaymentDialog } from "./SimulatePaymentDialog";
+import { PendingIncomePrompt } from "./PendingIncomePrompt";
 import { SectionLabel } from "@/components/ui/primitives";
+import { anchorBucketsToBalance } from "@/lib/data/buckets";
+import { formatEuros } from "@/lib/model/money";
 
 // Coarse "x ago" for the bank status line. Display-only; minute granularity is fine.
 function timeAgo(iso: string): string {
@@ -24,10 +29,12 @@ function timeAgo(iso: string): string {
 }
 
 export default function Page() {
+  const { user } = useAuth();
   const { buckets, loading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
   const { refresh, busy: syncBusy, lastResult, error } = useBankSync();
   const { status: bankStatus } = useBankStatus();
+  const { pending } = usePendingIncome();
   const [showDialog, setShowDialog] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
@@ -55,6 +62,25 @@ export default function Page() {
         onTrack={onTrack}
         monthProgress={monthProgress}
       />
+
+      {bankStatus?.currentBalance !== undefined && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0 0 1rem" }}>
+          <span style={{ color: "var(--color-muted)", fontSize: "0.8125rem" }}>
+            Account balance: {formatEuros(bankStatus.currentBalance)}
+          </span>
+          {Math.abs(bankStatus.currentBalance - safeToSpend) > 0 && (
+            <button
+              onClick={() => { if (user && bankStatus.currentBalance !== undefined) void anchorBucketsToBalance(user.uid, bankStatus.currentBalance); }}
+              className="rounded-lg py-1 px-2 text-xs font-semibold"
+              style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)", cursor: "pointer" }}
+            >
+              Re-sync buckets to balance
+            </button>
+          )}
+        </div>
+      )}
+
+      <PendingIncomePrompt pending={pending} buckets={buckets} />
 
       <div style={{ marginBottom: "1rem" }}>
         {buckets.map((bucket) => (

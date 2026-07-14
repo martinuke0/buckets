@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 export interface BankStatus {
   connectedAt?: string;
   lastSyncedAt?: string;
+  currentBalance?: number;
 }
 
 // Reads the client-visible bank status marker (users/{uid}/meta/bank), written
