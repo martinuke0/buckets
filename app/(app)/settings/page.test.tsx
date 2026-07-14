@@ -40,10 +40,11 @@ describe("Settings page", () => {
 
     // Security copy must be present
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
-    expect(screen.getByText(/powered by plaid/i)).toBeInTheDocument();
+    expect(screen.getByText(/bank-grade connection/i)).toBeInTheDocument();
 
-    // NO leaked internal strings
+    // NO leaked internal strings — including the infra vendor name
     expect(screen.queryByText(/internal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/plaid/i)).not.toBeInTheDocument();
   });
 
   it("renders bank connection section with trust badges", () => {

@@ -47,9 +47,9 @@ export default function Page() {
             Your bank login is entered on your bank&apos;s secure page. We never see your credentials and can&apos;t move money.
           </div>
 
-          {/* Powered by Plaid */}
+          {/* Bank-grade connection via a regulated open-banking provider; no vendor name in UI. */}
           <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-            Powered by Plaid · revoke access anytime
+            Secure bank-grade connection · revoke access anytime
           </div>
         </div>
       </section>
