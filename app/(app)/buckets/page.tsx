@@ -9,11 +9,11 @@ import type { Bucket } from "@/lib/model/types";
 import { SectionLabel } from "@/components/ui/primitives";
 
 const DEFAULT_BUCKETS: Omit<Bucket, "id">[] = [
-  { name: "Housing", colorIndex: 0, percent: 35, type: "virtual", remaining: 0, allocated: 0 },
-  { name: "Savings", colorIndex: 1, percent: 30, type: "virtual", remaining: 0, allocated: 0 },
-  { name: "Food", colorIndex: 2, percent: 15, type: "virtual", remaining: 0, allocated: 0 },
-  { name: "Leisure", colorIndex: 3, percent: 10, type: "virtual", remaining: 0, allocated: 0 },
-  { name: "Health", colorIndex: 4, percent: 10, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Bills", colorIndex: 0, percent: 40, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Savings", colorIndex: 1, percent: 25, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Food", colorIndex: 2, percent: 20, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Fun", colorIndex: 3, percent: 10, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Others", colorIndex: 4, percent: 5, type: "virtual", remaining: 0, allocated: 0 },
 ];
 
 export default function Page() {
