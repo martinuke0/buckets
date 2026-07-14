@@ -61,7 +61,7 @@ export async function listConnections(
 // (readable by the owner per firestore.rules). No tokens ever land here.
 export async function setBankMeta(
   uid: string,
-  fields: { connectedAt?: string; lastSyncedAt?: string }
+  fields: { connectedAt?: string; lastSyncedAt?: string; currentBalance?: number }
 ): Promise<void> {
   await getFirestore()
     .doc(`users/${uid}/meta/bank`)
@@ -311,5 +311,46 @@ export async function applyRebalance(
     tx.update(toRef, {
       remaining: FieldValue.increment(amount),
     });
+  });
+}
+
+// Anchor: set Σ(bucket.remaining) to the real balance, partitioned by percent.
+// REPLACE semantics (not increment) so the sum equals the balance exactly. Runs
+// before the first sync draws spends. onlyIfFirstConnect guards reconnect from
+// wiping drawn-down balances.
+export async function anchorBucketsToBalance(
+  uid: string,
+  balanceCents: number,
+  opts?: { onlyIfFirstConnect?: boolean }
+): Promise<boolean> {
+  const db = getFirestore();
+  return db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    const metaRef = db.doc(`users/${uid}/meta/bank`);
+    if (opts?.onlyIfFirstConnect) {
+      const metaSnap = await tx.get(metaRef);
+      if (metaSnap.exists && metaSnap.get("anchoredAt")) return false;
+    }
+    const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+    if (bucketsSnap.empty) return false;
+    const rules: SplitRule[] = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+      bucketId: d.id,
+      percent: d.get("percent") as number,
+    }));
+    const total = rules.reduce((s, r) => s + r.percent, 0);
+    if (Math.abs(total - 100) >= 0.001) return false;
+    let allocs;
+    try {
+      allocs = splitIncome(balanceCents, rules);
+    } catch {
+      return false;
+    }
+    for (const a of allocs) {
+      tx.update(db.doc(`users/${uid}/buckets/${a.bucketId}`), {
+        remaining: a.amount,
+        allocated: a.amount,
+      });
+    }
+    tx.set(metaRef, { anchoredAt: new Date().toISOString() }, { merge: true });
+    return true;
   });
 }
