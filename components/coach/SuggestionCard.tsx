@@ -42,8 +42,9 @@ export function SuggestionCard({ suggestion, buckets, onApply, onDismiss }: Sugg
           onClick={onDismiss}
           className="px-4 py-2 rounded text-sm font-medium"
           style={{
-            background: "var(--color-surface-2)",
+            background: "var(--color-base)",
             color: "var(--color-muted)",
+            border: "1px solid var(--color-border)",
           }}
           aria-label="Dismiss suggestion"
         >

@@ -21,7 +21,7 @@ export function MessageBubble({ role, text }: MessageBubbleProps) {
           maxWidth: "70%",
           padding: "0.75rem 1rem",
           borderRadius: "1rem",
-          background: isUser ? "var(--color-surface-2)" : "var(--color-surface-1)",
+          background: isUser ? "var(--grad-brand)" : "var(--color-base)",
           color: "var(--color-text)",
           fontSize: "0.875rem",
           lineHeight: "1.5",

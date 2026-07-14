@@ -74,7 +74,7 @@ export default function Page() {
           flex: 1,
           overflowY: "auto",
           padding: "1rem",
-          background: "var(--color-surface-1)",
+          background: "var(--color-card)",
           borderRadius: "0.5rem",
           marginBottom: "1rem",
         }}
@@ -117,7 +117,7 @@ export default function Page() {
             flex: 1,
             padding: "0.75rem 1rem",
             borderRadius: "0.5rem",
-            background: "var(--color-surface-2)",
+            background: "var(--color-base)",
             color: "var(--color-text)",
             border: "1px solid var(--color-border)",
             fontSize: "0.875rem",
@@ -129,7 +129,7 @@ export default function Page() {
           disabled={!input.trim() || applying}
           className="px-6 py-3 rounded text-sm font-medium"
           style={{
-            background: input.trim() && !applying ? "var(--grad-brand)" : "var(--color-surface-2)",
+            background: input.trim() && !applying ? "var(--grad-brand)" : "var(--color-base)",
             color: input.trim() && !applying ? "var(--color-text)" : "var(--color-muted)",
             cursor: input.trim() && !applying ? "pointer" : "not-allowed",
           }}
