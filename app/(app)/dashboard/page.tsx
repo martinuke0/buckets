@@ -68,7 +68,8 @@ export default function Page() {
           <span style={{ color: "var(--color-muted)", fontSize: "0.8125rem" }}>
             Account balance: {formatEuros(bankStatus.currentBalance)}
           </span>
-          {Math.abs(bankStatus.currentBalance - safeToSpend) > 0 && (
+          {/* Tolerate a 1-cent rounding artifact; only nudge re-anchor on real drift. */}
+          {Math.abs(bankStatus.currentBalance - safeToSpend) > 1 && (
             <button
               onClick={() => { if (user && bankStatus.currentBalance !== undefined) void anchorBucketsToBalance(user.uid, bankStatus.currentBalance); }}
               className="rounded-lg py-1 px-2 text-xs font-semibold"
