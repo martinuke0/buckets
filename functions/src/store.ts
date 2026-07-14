@@ -314,6 +314,43 @@ export async function applyRebalance(
   });
 }
 
+// New income is NOT auto-split — record it as pending so the client can prompt
+// the user to confirm the split (confirm-first). Idempotent by incomeTxId.
+// CRITICAL: re-syncing an already-resolved income must NOT flip it back to unresolved.
+// We use a transaction to only set resolved:false when creating a NEW document.
+export async function writePendingIncome(
+  uid: string,
+  income: { incomeTxId: string; amount: number; description: string; bookedAt: string },
+): Promise<void> {
+  const db = getFirestore();
+  const docRef = db.doc(`users/${uid}/pendingIncome/${income.incomeTxId}`);
+
+  await db.runTransaction(async (tx: FirebaseFirestore.Transaction) => {
+    const snap = await tx.get(docRef);
+
+    if (!snap.exists) {
+      // New pending income — write the full document including resolved:false
+      tx.set(docRef, {
+        amount: income.amount,
+        description: income.description,
+        bookedAt: income.bookedAt,
+        createdAt: new Date().toISOString(),
+        resolved: false,
+      });
+    } else {
+      // Already exists — update only the non-resolved fields (merge semantics without overwriting resolved)
+      // This handles the edge case where the same transaction is re-synced with different description/amount/bookedAt
+      // but preserves the resolved state if the user already confirmed it.
+      tx.set(docRef, {
+        amount: income.amount,
+        description: income.description,
+        bookedAt: income.bookedAt,
+      }, { merge: true });
+      // Note: we explicitly do NOT set resolved:false here, so a resolved:true stays resolved:true
+    }
+  });
+}
+
 // Anchor: set Σ(bucket.remaining) to the real balance, partitioned by percent.
 // REPLACE semantics (not increment) so the sum equals the balance exactly. Runs
 // before the first sync draws spends. onlyIfFirstConnect guards reconnect from

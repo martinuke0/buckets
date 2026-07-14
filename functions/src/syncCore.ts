@@ -4,7 +4,7 @@ import {
   listConnections,
   saveCursor,
   writeTransactions,
-  applyIncomeAdmin,
+  writePendingIncome,
   getCategoryRules,
   applySpendCategorization,
   setBankMeta,
@@ -90,10 +90,15 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   let geminiHits = 0;
   let noMatch = 0;
 
-  // 1) Income splits first (unchanged path).
+  // 1) Income is NOT auto-split — record pending so the user confirms the split.
   for (const txn of created) {
     if (txn.isIncome) {
-      await applyIncomeAdmin(uid, txn.amount, txn.providerTxnId);
+      await writePendingIncome(uid, {
+        incomeTxId: txn.providerTxnId,
+        amount: txn.amount,
+        description: txn.description,
+        bookedAt: txn.bookedAt,
+      });
     }
   }
 
