@@ -45,10 +45,15 @@ function createPlaidAdapter(): PlaidAdapter {
  * - Writes new transactions to Firestore
  * - Auto-splits income transactions into user's buckets
  *
- * @param opts.suppressIncomePrompts - skip writePendingIncome for income (catch-up sync)
+ * @param opts.recordOnly - first-connect catch-up: write transaction rows for
+ *   history but do NOT classify spends or prompt on income. These pre-anchor
+ *   transactions are already reflected in the real balance the anchor sets, so
+ *   classifying them would draw down buckets that the anchor then replaces AND
+ *   leave historical txns misleadingly attached to buckets. Classification
+ *   happens only on later syncs — i.e. only after the first bucket fill (anchor).
  * @returns { added: number } - count of newly-created transactions
  */
-export async function syncOneUser(uid: string, opts?: { suppressIncomePrompts?: boolean }): Promise<{ added: number }> {
+export async function syncOneUser(uid: string, opts?: { recordOnly?: boolean }): Promise<{ added: number }> {
   const adapter = createPlaidAdapter();
   const connections = await listConnections(uid);
 
@@ -91,19 +96,25 @@ export async function syncOneUser(uid: string, opts?: { suppressIncomePrompts?: 
   let geminiHits = 0;
   let noMatch = 0;
 
+  // recordOnly (first-connect catch-up): transaction rows are already written above.
+  // Do NOT classify spends or prompt on income — these pre-anchor transactions are
+  // baked into the real balance the anchor is about to set. Classify/prompt only on
+  // later syncs, i.e. only after the first bucket fill.
+  if (opts?.recordOnly) {
+    console.log(`syncOneUser(${uid}): recordOnly — wrote ${created.length} txns, no classification`);
+    await setBankMeta(uid, { lastSyncedAt: new Date().toISOString() });
+    return { added: created.length };
+  }
+
   // 1) Income is NOT auto-split — record pending so the user confirms the split.
-  //    EXCEPT on catch-up syncs: the anchor will replace buckets with the balance
-  //    partition, so prompting would let the user double-add historical income.
-  if (!opts?.suppressIncomePrompts) {
-    for (const txn of created) {
-      if (txn.isIncome) {
-        await writePendingIncome(uid, {
-          incomeTxId: txn.providerTxnId,
-          amount: txn.amount,
-          description: txn.description,
-          bookedAt: txn.bookedAt,
-        });
-      }
+  for (const txn of created) {
+    if (txn.isIncome) {
+      await writePendingIncome(uid, {
+        incomeTxId: txn.providerTxnId,
+        amount: txn.amount,
+        description: txn.description,
+        bookedAt: txn.bookedAt,
+      });
     }
   }
 

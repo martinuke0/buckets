@@ -85,7 +85,7 @@ export const exchangePublicToken = onCall<{ publicToken: string }>(
     // Catch-up sync: writes txns + categorizes spends (no income prompts; the anchor
     // will replace buckets with the clean balance partition, so prompting would
     // let the user double-add historical income already reflected in the balance).
-    await syncOneUser(request.auth.uid, { suppressIncomePrompts: true });
+    await syncOneUser(request.auth.uid, { recordOnly: true });
 
     // Anchor LAST: REPLACE buckets with the balance partition (first connect only).
     // Because this runs AFTER the catch-up sync, historical spends cannot double-count
