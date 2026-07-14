@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import type { Bucket } from "@/lib/model/types";
 import { pickDotColor } from "@/lib/theme";
 import { BucketMenu } from "./BucketMenu";
 
 interface BucketRowProps {
   bucket: Bucket;
+  href?: string;
   onPercentChange: (percent: number) => void;
   onRename: (newName: string) => void;
   onRecolor: (colorIndex: number) => void;
@@ -15,6 +17,7 @@ interface BucketRowProps {
 
 export function BucketRow({
   bucket,
+  href,
   onPercentChange,
   onRename,
   onRecolor,
@@ -58,7 +61,13 @@ export function BucketRow({
         aria-hidden="true"
       />
 
-      <span className="flex-1 text-sm" style={{ color: "var(--color-text)" }}>{bucket.name}</span>
+      {href ? (
+        <Link href={href} className="flex-1 text-sm hover:opacity-80" style={{ color: "var(--color-text)", textDecoration: "none" }}>
+          {bucket.name}
+        </Link>
+      ) : (
+        <span className="flex-1 text-sm" style={{ color: "var(--color-text)" }}>{bucket.name}</span>
+      )}
 
       <input
         type="number"
