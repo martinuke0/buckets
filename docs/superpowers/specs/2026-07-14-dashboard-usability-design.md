@@ -75,7 +75,8 @@ Each component is independently testable and has one responsibility.
 - **What:** Keep `safeToSpend = buckets.reduce((s,b)=>s+b.remaining,0)` (already
   computed in `dashboard/page.tsx`). Relabel the hero from "Safe to spend today"
   to **"Safe to spend"** so the number reads as "total left across your envelopes."
-- Keep the month-pacing bar and "payday in Nd" line unchanged.
+- Keep the month-pacing bar. (The "payday in Nd" line was removed — it was a
+  fabricated estimate assuming payday = end of month.)
 - **Depends on:** nothing new; copy + prop framing only.
 
 ### 3. Tap-to-reclassify — `app/(app)/dashboard/tx/[id]/page.tsx` (new) + `TransactionList`

@@ -41,13 +41,10 @@ export default function Page() {
   // Compute safe to spend (sum of remaining)
   const safeToSpend = buckets.reduce((sum, b) => sum + b.remaining, 0);
 
-  // Simple date-based calculation for demo (display concern, acceptable here)
+  // Month-pacing: how far through the current month we are (honest calendar signal).
   const now = new Date();
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const daysInMonth = endOfMonth.getDate();
-  const currentDay = now.getDate();
-  const daysToPayday = daysInMonth - currentDay;
-  const monthProgress = currentDay / daysInMonth;
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const monthProgress = now.getDate() / daysInMonth;
 
   // Simple on-track heuristic: if we have any money left and we're not at end of month
   const onTrack = safeToSpend > 0 && monthProgress < 0.9;
@@ -57,7 +54,6 @@ export default function Page() {
       <SafeToSpendHero
         safeToSpend={safeToSpend}
         onTrack={onTrack}
-        daysToPayday={daysToPayday}
         monthProgress={monthProgress}
       />
 
