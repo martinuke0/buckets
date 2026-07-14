@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the dashboard read correctly and feel like a real banking app — auto-seed default buckets, hero shows total remaining, tappable transactions with a reclassify detail page, "Load more" pagination, and tappable bucket rows.
+**Goal:** Make the dashboard read correctly and feel like a real banking app — auto-create default buckets on first bank connection, hero shows total remaining, tappable transactions with a reclassify detail page, "Load more" pagination, tappable bucket rows, and a dev-only "Simulate payment".
 
-**Architecture:** All client-side React (Next.js 16 App Router) + Firestore reads/writes through existing hooks and the existing `recategorize` transaction. One new seed hook, one shared defaults module, two new/edited routes, plus small edits to the transaction list and bucket rows. No Cloud Functions changes, no money-math changes.
+**Architecture:** Mostly client-side React (Next.js 16 App Router) + Firestore through existing hooks and the existing `recategorize` transaction. Default buckets are created **server-side** in the `exchangePublicToken` Cloud Function (before the first sync) so income can split immediately. A shared defaults module is used by both the Buckets page (client) and — via a functions-local copy — the seed. New/edited routes for the transaction detail + list, bucket rows, and a dev-gated Simulate payment dialog. No money-math changes.
 
 **Tech Stack:** Next.js 16 (App Router, `"use client"`), React 19, TypeScript strict, Firestore (`firebase/firestore`), Vitest + React Testing Library.
 
@@ -22,20 +22,22 @@
 
 ## File Structure
 
-- `lib/data/defaultBuckets.ts` — NEW. Single source of the default bucket set (`DEFAULT_BUCKETS`). Imported by the Buckets page and the seeder (DRY).
-- `lib/data/ensureBuckets.ts` — NEW. Pure-ish async `ensureBuckets(uid)` that seeds defaults once when the user has none and hasn't been seeded before.
-- `lib/data/useEnsureBuckets.ts` — NEW. Thin `"use client"` hook that calls `ensureBuckets(uid)` once per session after auth resolves.
-- `app/(app)/layout.tsx` — MODIFY. Mount `useEnsureBuckets()`.
-- `app/(app)/buckets/page.tsx` — MODIFY. Import `DEFAULT_BUCKETS` from the shared module instead of the local literal.
-- `components/buckets/SafeToSpendHero.tsx` — already updated (label "Safe to spend", no payday line). Task 2 only adds//confirms the test.
-- `app/(app)/dashboard/page.tsx` — MODIFY. Pass paginated behaviour is inside TransactionList; row tap handled in TransactionList. Remove `onRecategorize` inline select wiring (rows become links).
+- `lib/data/defaultBuckets.ts` — NEW. Single source of the client default bucket set (`DEFAULT_BUCKETS`). Imported by the Buckets page.
+- `functions/src/defaultBuckets.ts` — NEW. Functions-local copy of the same 5 defaults (functions compile independently and must not import client code via `@/`). One place, small array; kept in sync by a test that asserts the two match.
+- `functions/src/store.ts` — MODIFY. Add `seedDefaultBucketsIfEmpty(uid)` (admin SDK) that writes the 5 defaults only when the user has zero buckets.
+- `functions/src/bank.ts` — MODIFY. In `exchangePublicToken`, call `seedDefaultBucketsIfEmpty(uid)` after saving the connection and BEFORE `syncOneUser`.
+- `app/(app)/buckets/page.tsx` — MODIFY. Import `DEFAULT_BUCKETS` from the shared client module instead of the local literal.
+- `components/buckets/SafeToSpendHero.tsx` — already updated (label "Safe to spend", no payday line). Task 3 adds the test.
+- `app/(app)/dashboard/page.tsx` — MODIFY. Rows navigate (no inline select). Add a dev-gated "Simulate payment" button + dialog mount.
 - `components/tx/TransactionList.tsx` — MODIFY. Remove inline `<select>`; rows become `Link`s to `/dashboard/tx/[id]`; add "Load more" (20 at a time).
 - `app/(app)/dashboard/tx/[id]/page.tsx` — NEW. Transaction detail + "Move to bucket" picker calling `recategorize`.
-- `components/buckets/BucketRow.tsx` — MODIFY. Make the bucket NAME a `Link` to `/dashboard/bucket/[id]` without hijacking drag/%/menu. Gated by an optional `href` prop so the setup screen can still be used without navigation in tests.
+- `app/(app)/dashboard/SimulatePaymentDialog.tsx` — NEW. Dev-only dialog: pick a bucket + amount, write a real spend transaction + draw down the bucket.
+- `lib/data/simulatePayment.ts` — NEW. `simulatePayment(uid, bucketId, cents, description)` — writes a spend txn + decrements bucket remaining (transaction).
+- `components/buckets/BucketRow.tsx` — MODIFY. Make the bucket NAME a `Link` to `/dashboard/bucket/[id]` without hijacking drag/%/menu. Gated by an optional `href` prop.
 
 ---
 
-## Task 1: Shared default buckets module
+## Task 1: Shared default buckets module (client)
 
 **Files:**
 - Create: `lib/data/defaultBuckets.ts`
@@ -43,7 +45,7 @@
 - Test: `lib/data/defaultBuckets.test.ts`
 
 **Interfaces:**
-- Produces: `export const DEFAULT_BUCKETS: Omit<Bucket, "id">[]` — the 5 defaults (Bills 40, Savings 25, Food 20, Fun 10, Others 5).
+- Produces: `export const DEFAULT_BUCKETS: Omit<Bucket, "id">[]` — the 5 defaults (Bills 40, Savings 25, Food 20, Fun 10, Others 5). Consumed by the Buckets page (client). The Cloud Function uses its own copy (Task 2) since functions can't import client `@/` modules.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -107,160 +109,114 @@ git commit -m "refactor(buckets): extract DEFAULT_BUCKETS to shared module"
 
 ---
 
-## Task 2: Auto-seed default buckets on first login
+## Task 2: Create default buckets server-side on first bank connection
 
 **Files:**
-- Create: `lib/data/ensureBuckets.ts`
-- Create: `lib/data/useEnsureBuckets.ts`
-- Modify: `app/(app)/layout.tsx` (mount the hook)
-- Test: `lib/data/ensureBuckets.test.ts`
+- Create: `functions/src/defaultBuckets.ts`
+- Modify: `functions/src/store.ts` (add `seedDefaultBucketsIfEmpty`)
+- Modify: `functions/src/bank.ts` (call it in `exchangePublicToken` before sync)
+- Test: `functions/src/defaultBuckets.test.ts` (parity with the client set) — run under the root vitest.
 
 **Interfaces:**
-- Consumes: `DEFAULT_BUCKETS` (Task 1), `getDb` (`@/lib/firebase/client`), `bucketsCol`/`userDoc` (`@/lib/model/paths`), `useAuth` (`@/lib/auth/AuthProvider`).
-- Produces:
-  - `ensureBuckets(uid: string): Promise<"seeded" | "skipped">` — seeds the 5 defaults IFF the user has zero buckets AND `users/{uid}/meta/app.seededBuckets` is not `true`. Sets that marker in the same write. Returns `"seeded"` when it wrote, `"skipped"` otherwise.
-  - `useEnsureBuckets(): void` — calls `ensureBuckets(user.uid)` exactly once per session after auth resolves.
+- Produces (functions-local): `export const DEFAULT_BUCKETS` in `functions/src/defaultBuckets.ts` — the same 5 rows as the client module (`{ name, colorIndex, percent, type, remaining, allocated }`), no `id`.
+- Produces (store): `seedDefaultBucketsIfEmpty(uid: string): Promise<boolean>` — admin SDK; writes the 5 defaults to `users/{uid}/buckets/{autoId}` IFF the user currently has zero buckets. Returns `true` if it seeded, `false` if skipped.
+- Consumes in `bank.ts`: called inside `exchangePublicToken` after `saveConnection` + `setBankMeta`, before `syncOneUser`.
 
-**Why a marker (delete-safety):** seeding only on "buckets empty" would re-seed a user who deliberately deleted all buckets. The `meta/app.seededBuckets` flag makes seeding one-time per user.
+**Why server-side:** the first sync (inside the same callable) splits income immediately; buckets must exist before it runs. Doing it in the function guarantees ordering with no client race. Delete-safety: the empty-check means a user with buckets is never overwritten; a rare reconnect-after-deleting-all re-seeds, which is acceptable.
 
-**Firestore shape:**
-- Buckets are written to `users/{uid}/buckets/{autoId}` with the `Omit<Bucket,"id">` fields.
-- Marker doc: `users/{uid}/meta/app` with `{ seededBuckets: true }` (merge).
+**Why a functions-local copy:** `functions/` compiles as its own tsconfig and cannot import client `@/lib/*` modules. The parity test keeps the two arrays identical.
 
-- [ ] **Step 1: Write the failing test**
-
-`lib/data/ensureBuckets.test.ts` — stable module-level mocks; assert seed happens once and is skipped when already-seeded or buckets exist:
-```ts
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// Stable mock fns (module-level; OOM guard)
-const getDocs = vi.fn();
-const getDoc = vi.fn();
-const setDoc = vi.fn().mockResolvedValue(undefined);
-const addDoc = vi.fn().mockResolvedValue({ id: "new" });
-vi.mock("firebase/firestore", () => ({
-  collection: (...a: unknown[]) => ({ __col: a }),
-  doc: (...a: unknown[]) => ({ __doc: a }),
-  getDocs: (...a: unknown[]) => getDocs(...a),
-  getDoc: (...a: unknown[]) => getDoc(...a),
-  setDoc: (...a: unknown[]) => setDoc(...a),
-  addDoc: (...a: unknown[]) => addDoc(...a),
-}));
-vi.mock("@/lib/firebase/client", () => ({ getDb: () => ({}) }));
-
-import { ensureBuckets } from "@/lib/data/ensureBuckets";
-
-beforeEach(() => {
-  getDocs.mockReset(); getDoc.mockReset();
-  setDoc.mockClear(); addDoc.mockClear();
-});
-
-it("seeds 5 buckets + marker when empty and unseeded", async () => {
-  getDoc.mockResolvedValue({ exists: () => false, data: () => undefined }); // marker absent
-  getDocs.mockResolvedValue({ empty: true, size: 0 });                       // no buckets
-  const r = await ensureBuckets("u1");
-  expect(r).toBe("seeded");
-  expect(addDoc).toHaveBeenCalledTimes(5);   // 5 default buckets
-  expect(setDoc).toHaveBeenCalledTimes(1);   // marker
-});
-
-it("skips when already seeded (marker true)", async () => {
-  getDoc.mockResolvedValue({ exists: () => true, data: () => ({ seededBuckets: true }) });
-  getDocs.mockResolvedValue({ empty: true, size: 0 });
-  const r = await ensureBuckets("u1");
-  expect(r).toBe("skipped");
-  expect(addDoc).not.toHaveBeenCalled();
-});
-
-it("skips when the user already has buckets", async () => {
-  getDoc.mockResolvedValue({ exists: () => false, data: () => undefined });
-  getDocs.mockResolvedValue({ empty: false, size: 3 });
-  const r = await ensureBuckets("u1");
-  expect(r).toBe("skipped");
-  expect(addDoc).not.toHaveBeenCalled();
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails** — FAIL (module not found).
-
-- [ ] **Step 3: Implement `lib/data/ensureBuckets.ts`**
+- [ ] **Step 1: Implement `functions/src/defaultBuckets.ts`**
 
 ```ts
-import { collection, doc, getDocs, getDoc, addDoc, setDoc } from "firebase/firestore";
-import { getDb } from "@/lib/firebase/client";
-import { bucketsCol } from "@/lib/model/paths";
-import { DEFAULT_BUCKETS } from "@/lib/data/defaultBuckets";
-
-// Seed the default bucket set exactly once per user. Guarded by both "no buckets
-// yet" AND a one-shot marker (users/{uid}/meta/app.seededBuckets) so a user who
-// deletes all their buckets is not re-seeded. Best-effort: callers ignore the
-// result; failures must not block render.
-export async function ensureBuckets(uid: string): Promise<"seeded" | "skipped"> {
-  const db = getDb();
-  const markerRef = doc(db, `users/${uid}/meta/app`);
-  const markerSnap = await getDoc(markerRef);
-  if (markerSnap.exists() && markerSnap.data()?.seededBuckets === true) {
-    return "skipped";
-  }
-
-  const bucketsSnap = await getDocs(collection(db, bucketsCol(uid)));
-  if (!bucketsSnap.empty) {
-    // Buckets already exist (created manually): record the marker, don't seed.
-    await setDoc(markerRef, { seededBuckets: true }, { merge: true });
-    return "skipped";
-  }
-
-  const col = collection(db, bucketsCol(uid));
-  for (const b of DEFAULT_BUCKETS) {
-    await addDoc(col, b);
-  }
-  await setDoc(markerRef, { seededBuckets: true }, { merge: true });
-  return "seeded";
+// Functions-local copy of the client default bucket set (lib/data/defaultBuckets.ts).
+// Functions compile independently and cannot import client @/ modules; a parity
+// test asserts these two arrays stay identical. Percentages sum to 100.
+export interface DefaultBucket {
+  name: string;
+  colorIndex: number;
+  percent: number;
+  type: "virtual";
+  remaining: number;
+  allocated: number;
 }
+
+export const DEFAULT_BUCKETS: DefaultBucket[] = [
+  { name: "Bills", colorIndex: 0, percent: 40, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Savings", colorIndex: 1, percent: 25, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Food", colorIndex: 2, percent: 20, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Fun", colorIndex: 3, percent: 10, type: "virtual", remaining: 0, allocated: 0 },
+  { name: "Others", colorIndex: 4, percent: 5, type: "virtual", remaining: 0, allocated: 0 },
+];
 ```
 
-- [ ] **Step 4: Run test to verify it passes** — `pnpm test lib/data/ensureBuckets.test.ts` → PASS.
+- [ ] **Step 2: Write the parity test**
 
-- [ ] **Step 5: Implement `lib/data/useEnsureBuckets.ts`**
-
+`functions/src/defaultBuckets.test.ts`:
 ```ts
-"use client";
-import { useEffect, useRef } from "react";
-import { useAuth } from "@/lib/auth/AuthProvider";
-import { ensureBuckets } from "@/lib/data/ensureBuckets";
+import { describe, it, expect } from "vitest";
+import { DEFAULT_BUCKETS as SERVER } from "@/../functions/src/defaultBuckets";
+import { DEFAULT_BUCKETS as CLIENT } from "@/lib/data/defaultBuckets";
 
-// Runs the one-time bucket seed once per session after auth resolves.
-// Best-effort: a seed failure is logged, never thrown (dashboard still renders).
-export function useEnsureBuckets(): void {
-  const { user } = useAuth();
-  const ran = useRef(false);
-  useEffect(() => {
-    if (!user || ran.current) return;
-    ran.current = true;
-    void ensureBuckets(user.uid).catch((e) =>
-      console.warn("ensureBuckets failed:", e instanceof Error ? e.message : e),
+describe("default bucket parity (client vs functions)", () => {
+  it("both sets are byte-identical in name/percent/color/order", () => {
+    expect(SERVER.map((b) => [b.name, b.percent, b.colorIndex])).toEqual(
+      CLIENT.map((b) => [b.name, b.percent, b.colorIndex]),
     );
-  }, [user]);
+  });
+  it("server set sums to 100", () => {
+    expect(SERVER.reduce((s, b) => s + b.percent, 0)).toBe(100);
+  });
+});
+```
+(If the `@/../functions` alias does not resolve under the root vitest config, import via a relative path: `import { DEFAULT_BUCKETS as SERVER } from "../../functions/src/defaultBuckets";` from the test's location. Verify the working import in Step 4.)
+
+- [ ] **Step 3: Add `seedDefaultBucketsIfEmpty` to `functions/src/store.ts`**
+
+```ts
+import { DEFAULT_BUCKETS } from "./defaultBuckets";
+
+// Create the default bucket set for a user who has none. Called on first bank
+// connection so the immediate sync can split income. No-op if buckets exist.
+export async function seedDefaultBucketsIfEmpty(uid: string): Promise<boolean> {
+  const db = getFirestore();
+  const col = db.collection(`users/${uid}/buckets`);
+  const snap = await col.get();
+  if (!snap.empty) {
+    return false;
+  }
+  const batch = db.batch();
+  for (const b of DEFAULT_BUCKETS) {
+    batch.set(col.doc(), b);
+  }
+  await batch.commit();
+  return true;
 }
 ```
+(Place the `import` with the other imports at the top of `store.ts`; `getFirestore` is already imported there.)
 
-- [ ] **Step 6: Mount in `app/(app)/layout.tsx`** — add the import and call the hook inside `AppLayout` (before the `loading` early-return is fine; the hook internally waits for `user`):
+- [ ] **Step 4: Call it in `functions/src/bank.ts`** — in `exchangePublicToken`, between the `setBankMeta(...connectedAt...)` call and `await syncOneUser(...)`:
 
 ```ts
-import { useEnsureBuckets } from "@/lib/data/useEnsureBuckets";
+    // Ensure the user has buckets before the first sync so income can split.
+    await seedDefaultBucketsIfEmpty(request.auth.uid);
 ```
-and inside the component body, after `const router = useRouter();`:
-```ts
-  useEnsureBuckets();
+Add `seedDefaultBucketsIfEmpty` to the existing `import { ... } from "./store";` line.
+
+- [ ] **Step 5: Build + typecheck functions, run the parity test**
+
+```
+cd functions && pnpm exec tsc --noEmit   # clean
+cd .. && pnpm exec tsc --noEmit           # clean
+pnpm test functions/src/defaultBuckets.test.ts   # PASS
+cd functions && pnpm run build            # emit lib/ so the emulator serves it
 ```
 
-- [ ] **Step 7: Verify** — `pnpm test lib/data/ensureBuckets.test.ts && pnpm exec tsc --noEmit` → PASS + clean.
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/data/ensureBuckets.ts lib/data/ensureBuckets.test.ts lib/data/useEnsureBuckets.ts "app/(app)/layout.tsx"
-git commit -m "feat(buckets): auto-seed default buckets once for new users"
+git add functions/src/defaultBuckets.ts functions/src/defaultBuckets.test.ts functions/src/store.ts functions/src/bank.ts
+git commit -m "feat(bank): create default buckets on first connection (server-side)"
 ```
 
 ---
@@ -711,28 +667,223 @@ git commit -m "feat(buckets): tappable bucket name links to detail page"
 
 ---
 
-## Task 7: Full-suite + typecheck gate
+## Task 7: Dev-only "Simulate payment" (writes a real spend)
+
+**Files:**
+- Create: `lib/data/simulatePayment.ts`
+- Create: `lib/data/simulatePayment.test.ts`
+- Create: `app/(app)/dashboard/SimulatePaymentDialog.tsx`
+- Modify: `app/(app)/dashboard/page.tsx` (dev-gated button + dialog mount)
+
+**Interfaces:**
+- Produces: `simulatePayment(uid: string, bucketId: string, cents: number, description: string): Promise<void>` — in a single Firestore transaction: (a) creates a spend txn at `users/{uid}/transactions/{autoId}` with `{ amount: -cents, description, bookedAt: <ISO date>, bucketId, isIncome: false }`; (b) decrements that bucket's `remaining` by `cents`. Mirrors `applySpendCategorization`'s draw-down but on the client, for a manually chosen bucket.
+- `SimulatePaymentDialog({ buckets, onClose })` — mirrors `SimulateIncomeDialog`: an amount input + a bucket picker; Confirm calls `simulatePayment`. `"use client"`, dark tokens, no emoji.
+- Dashboard button is rendered ONLY when `process.env.NODE_ENV === "development"` so it is stripped from production.
+
+**Note:** `cents` must be a positive integer (magnitude). The stored `amount` is negative (spend). Uses `toCents` from `@/lib/model/money` to convert the euro input.
+
+- [ ] **Step 1: Write the failing test**
+
+`lib/data/simulatePayment.test.ts` — stable module-level mocks of `firebase/firestore`'s `runTransaction`/`doc`/`collection`/`increment`:
+```ts
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const txSet = vi.fn();
+const txUpdate = vi.fn();
+const runTransaction = vi.fn(async (_db: unknown, fn: (tx: unknown) => Promise<void>) => {
+  await fn({ set: txSet, update: txUpdate });
+});
+vi.mock("firebase/firestore", () => ({
+  collection: (...a: unknown[]) => ({ __col: a }),
+  doc: (...a: unknown[]) => ({ __doc: a }),
+  runTransaction: (...a: [unknown, (tx: unknown) => Promise<void>]) => runTransaction(...a),
+  increment: (n: number) => ({ __inc: n }),
+}));
+vi.mock("@/lib/firebase/client", () => ({ getDb: () => ({}) }));
+
+import { simulatePayment } from "@/lib/data/simulatePayment";
+
+beforeEach(() => { txSet.mockClear(); txUpdate.mockClear(); });
+
+it("writes a negative spend txn and draws down the bucket", async () => {
+  await simulatePayment("u1", "food", 899, "Test spend");
+  // txn set with negative amount + chosen bucket
+  const setArg = txSet.mock.calls[0][1];
+  expect(setArg.amount).toBe(-899);
+  expect(setArg.bucketId).toBe("food");
+  expect(setArg.isIncome).toBe(false);
+  // bucket remaining decremented by magnitude
+  expect(txUpdate).toHaveBeenCalledWith(expect.anything(), { remaining: { __inc: -899 } });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails** — FAIL (module not found).
+
+- [ ] **Step 3: Implement `lib/data/simulatePayment.ts`**
+
+```ts
+import { collection, doc, runTransaction, increment } from "firebase/firestore";
+import { getDb } from "@/lib/firebase/client";
+import { bucketsCol, txCol } from "@/lib/model/paths";
+
+// Dev/testing helper: write a real spend transaction against a chosen bucket and
+// draw its remaining down, exactly like a synced spend. Surfaced only behind a
+// dev-gated button; not used in production.
+export async function simulatePayment(
+  uid: string,
+  bucketId: string,
+  cents: number,
+  description: string,
+): Promise<void> {
+  const db = getDb();
+  const magnitude = Math.abs(Math.round(cents));
+  await runTransaction(db, async (tx) => {
+    const txnRef = doc(collection(db, txCol(uid)));
+    tx.set(txnRef, {
+      amount: -magnitude,
+      description,
+      bookedAt: new Date().toISOString().slice(0, 10),
+      bucketId,
+      isIncome: false,
+    });
+    const bRef = doc(db, bucketsCol(uid), bucketId);
+    tx.update(bRef, { remaining: increment(-magnitude) });
+  });
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes** — `pnpm test lib/data/simulatePayment.test.ts` → PASS.
+
+- [ ] **Step 5: Implement `app/(app)/dashboard/SimulatePaymentDialog.tsx`** — model on `SimulateIncomeDialog` (same overlay/card/token styling). An amount input, a bucket `<select>` (default first bucket), Confirm → `simulatePayment(user.uid, bucketId, toCents(euros), \`Simulated: ${bucketName}\`)` then `onClose()`:
+
+```tsx
+"use client";
+import { useState } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { simulatePayment } from "@/lib/data/simulatePayment";
+import { toCents } from "@/lib/model/money";
+import type { Bucket } from "@/lib/model/types";
+
+export function SimulatePaymentDialog({ buckets, onClose }: { buckets: Bucket[]; onClose: () => void }) {
+  const { user } = useAuth();
+  const [amount, setAmount] = useState("");
+  const [bucketId, setBucketId] = useState(buckets[0]?.id ?? "");
+  const [loading, setLoading] = useState(false);
+
+  const cents = toCents(parseFloat(amount) || 0);
+
+  const handleConfirm = async () => {
+    if (!user || cents <= 0 || !bucketId) return;
+    setLoading(true);
+    try {
+      const name = buckets.find((b) => b.id === bucketId)?.name ?? "Bucket";
+      await simulatePayment(user.uid, bucketId, cents, `Simulated: ${name}`);
+      onClose();
+    } catch (err) {
+      console.error("Failed to simulate payment:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div className="rounded-2xl p-6 max-w-md w-full mx-4" style={{ background: "var(--color-card)" }} onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-xl font-bold mb-4" style={{ color: "var(--color-text)" }}>Simulate Payment</h2>
+
+        <label className="block mb-4">
+          <span className="text-sm font-semibold mb-2 block" style={{ color: "var(--color-text)" }}>Bucket</span>
+          <select
+            value={bucketId}
+            onChange={(e) => setBucketId(e.target.value)}
+            className="w-full rounded-lg px-4 py-2"
+            style={{ background: "var(--color-base)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+          >
+            {buckets.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
+          </select>
+        </label>
+
+        <label className="block mb-4">
+          <span className="text-sm font-semibold mb-2 block" style={{ color: "var(--color-text)" }}>Amount (EUR)</span>
+          <input
+            type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" step="0.01"
+            className="w-full rounded-lg px-4 py-2"
+            style={{ background: "var(--color-base)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+          />
+        </label>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleConfirm}
+            disabled={loading || cents <= 0 || !bucketId}
+            className="flex-1 rounded-lg py-2 px-4 font-semibold"
+            style={{ background: cents > 0 ? "var(--grad-brand)" : "var(--color-border)", color: "var(--color-text)", cursor: cents <= 0 || loading ? "not-allowed" : "pointer" }}
+          >
+            {loading ? "Applying..." : "Confirm"}
+          </button>
+          <button onClick={onClose} disabled={loading} className="rounded-lg py-2 px-4 font-semibold" style={{ background: "var(--color-border)", color: "var(--color-text)" }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Wire dev-gated button into `app/(app)/dashboard/page.tsx`** — add state `const [showPayment, setShowPayment] = useState(false);`, import the dialog, and render (next to the existing "Simulate income" button):
+
+```tsx
+      {process.env.NODE_ENV === "development" && (
+        <button
+          onClick={() => setShowPayment(true)}
+          className="w-full rounded-lg py-3 px-4 font-semibold mt-2"
+          style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+        >
+          Simulate payment (dev)
+        </button>
+      )}
+
+      {showPayment && (
+        <SimulatePaymentDialog buckets={buckets} onClose={() => setShowPayment(false)} />
+      )}
+```
+Import: `import { SimulatePaymentDialog } from "./SimulatePaymentDialog";`
+
+- [ ] **Step 7: Run tests + typecheck** — `pnpm test lib/data/simulatePayment.test.ts && pnpm exec tsc --noEmit` → PASS + clean.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add lib/data/simulatePayment.ts lib/data/simulatePayment.test.ts "app/(app)/dashboard/SimulatePaymentDialog.tsx" "app/(app)/dashboard/page.tsx"
+git commit -m "feat(dev): Simulate payment dialog (writes real spend, dev-gated)"
+```
+
+---
+
+## Task 8: Full-suite + typecheck gate
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the whole suite** — `pnpm test` → all pass (expect existing 86 + the new tests from Tasks 1–6; no regressions).
-- [ ] **Step 2: Typecheck** — `pnpm exec tsc --noEmit` → clean.
-- [ ] **Step 3: Functions untouched check** — confirm `git status` shows no changes under `functions/` (this plan is client-only).
-- [ ] **Step 4: If anything fails, fix under the owning task and re-run.** No commit needed if 1–3 are clean and already committed.
+- [ ] **Step 1: Run the whole suite** — `pnpm test` → all pass (existing 86 + new tests from Tasks 1–7; no regressions).
+- [ ] **Step 2: Typecheck (root + functions)** — `pnpm exec tsc --noEmit` clean AND `cd functions && pnpm exec tsc --noEmit` clean.
+- [ ] **Step 3: Functions build** — `cd functions && pnpm run build` so the emulator serves the updated seed logic.
+- [ ] **Step 4: If anything fails, fix under the owning task and re-run.**
 
 ---
 
 ## Self-Review
 
-- **Spec coverage:** (1) auto-seed → Task 2 (defaults module Task 1); (2) hero total remaining → Task 3; (3) tap-to-reclassify via tx detail → Tasks 4+5; (4) load-more pagination → Task 4; (5) tappable bucket rows → Task 6. All five spec components mapped. The removed "payday" line is reflected in Task 3.
-- **Type consistency:** `TransactionList` prop shape changes in Task 4 and every caller (dashboard, bucket detail) is updated in the same task. `BucketRow` gains `href?` in Task 6 and BucketSetup threads it. `ensureBuckets` returns `"seeded" | "skipped"` consistently. `SafeToSpendHero` signature (no `daysToPayday`) matches the already-edited component.
+- **Spec coverage:** (1) default buckets on first bank connection → Task 2 (client defaults module Task 1); (2) hero total remaining → Task 3; (3) tap-to-reclassify via tx detail → Tasks 4+5; (4) load-more pagination → Task 4; (5) tappable bucket rows → Task 6; (6) dev-only Simulate payment → Task 7. All six spec components mapped. The removed "payday" line is reflected in Task 3.
+- **Type consistency:** `TransactionList` prop shape changes in Task 4 and every caller (dashboard, bucket detail) is updated in the same task. `BucketRow` gains `href?` in Task 6 and BucketSetup threads it. `seedDefaultBucketsIfEmpty` returns `boolean`; `simulatePayment` returns `Promise<void>`. `SafeToSpendHero` signature (no `daysToPayday`) matches the already-edited component.
 - **Placeholder scan:** no TBD/TODO; every code step has full code.
-- **DRY:** `DEFAULT_BUCKETS` centralized (Task 1) and reused by the seeder and Buckets page.
+- **DRY:** client `DEFAULT_BUCKETS` centralized (Task 1); the functions-local copy (Task 2) is kept identical by a parity test. `simulatePayment` reuses the same txn+increment pattern as the existing spend path rather than a new abstraction.
 
 ## Verification (whole plan, emulator)
 
-1. Fresh dev user → dashboard: 5 buckets auto-seeded (Bills/Savings/Food/Fun/Others); after a sync with income, hero shows non-zero total remaining.
+1. Fresh dev user connects a bank → the 5 defaults (Bills/Savings/Food/Fun/Others) are created server-side before the first sync; after income syncs, hero shows non-zero total remaining.
 2. Transaction list caps at 20 with a working "Load more".
 3. Tap a transaction → detail → "Move to bucket" → bucket `remaining` updates; the txn shows the new bucket on return.
 4. Buckets tab → tap a bucket name → its detail page lists transactions classified into it; editing a bucket (rename/slider/drag) does not navigate.
-5. `pnpm test` + `pnpm exec tsc --noEmit` clean; no `functions/` changes.
+5. Dev only: "Simulate payment (dev)" → pick a bucket + amount → a new spend appears in the list AND the bucket's remaining + hero total drop. Button absent in a production build.
+6. `pnpm test` + root `tsc` + functions `tsc` all clean.

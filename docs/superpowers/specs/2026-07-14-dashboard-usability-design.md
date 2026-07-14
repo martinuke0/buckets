@@ -9,6 +9,17 @@ Make the dashboard read correctly and feel like a real banking app: a meaningful
 hero number, tappable transactions with a clear reclassify flow, a bounded
 transaction list, tappable buckets, and no dead €0.00 for fresh users.
 
+## Decisions (locked)
+
+- **Default buckets are created server-side on first bank connection** (inside
+  `exchangePublicToken`, before the first sync) — not on client login. This
+  guarantees the first income can split. Delete-safety: seed only when the user
+  currently has zero buckets (an empty-check; reconnecting after deleting all
+  buckets re-seeding is an accepted rare edge, not worth a marker).
+- **A dev-only "Simulate payment"** dialog writes a real spend transaction and
+  draws down a chosen bucket — dev-gated (`NODE_ENV === "development"`), never
+  ships to production, mirroring the existing "Simulate income" button.
+
 ## Root Cause Context
 
 Three of the five reported symptoms share one cause: **a user with zero buckets**.
@@ -25,12 +36,15 @@ dropdown, and empty classification together.
 ## Scope
 
 **IN:**
-1. Auto-seed default buckets on first authenticated load when the user has none.
+1. Auto-create default buckets **server-side on first bank connection** (inside
+   `exchangePublicToken`, before the first sync) when the user has none.
 2. Hero shows **total remaining across all buckets**, relabeled "Safe to spend".
 3. Tap-to-reclassify: transaction rows are tappable → a transaction detail view
    with a "Move to bucket" picker (replaces the inline `<select>`).
 4. "Load more" pagination in the transaction list (20 at a time, client-side slice).
 5. Tappable bucket rows on the Buckets tab → existing `/dashboard/bucket/[id]`.
+6. **Dev-only "Simulate payment"** dialog (pick bucket + amount) that writes a
+   real spend transaction and draws down the chosen bucket. Dev-gated.
 
 **OUT (YAGNI):** richer bucket analytics, infinite scroll, forced-onboarding
 redirect, observability, any money-logic change.
