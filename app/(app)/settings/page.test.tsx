@@ -6,6 +6,7 @@ import Page from "./page";
 const mockBankConnection = {
   connect: vi.fn(),
   refresh: vi.fn(),
+  launcher: null,
   busy: false,
   lastResult: null,
   error: null,

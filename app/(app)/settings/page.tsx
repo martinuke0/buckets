@@ -5,7 +5,7 @@ import { getAuthClient } from "@/lib/firebase/client";
 import { Card, SectionLabel, TrustBadge } from "@/components/ui/primitives";
 
 export default function Page() {
-  const { connect, busy, error } = useBankConnection();
+  const { connect, launcher, busy, error } = useBankConnection();
   const { user } = useAuth();
 
   return (
@@ -29,6 +29,7 @@ export default function Page() {
             >
               {busy ? "Connecting..." : "Connect a bank"}
             </button>
+            {launcher}
             {error && (
               <div style={{ color: "var(--color-danger)", marginTop: "0.75rem", fontSize: "0.875rem" }}>
                 {error}

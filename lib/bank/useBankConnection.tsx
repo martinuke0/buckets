@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import { usePlaidLink, type PlaidLinkOptions } from "react-plaid-link";
+import { usePlaidLink } from "react-plaid-link";
 import { httpsCallable } from "firebase/functions";
 import { getBankFunctions } from "./functionsClient";
 import { friendlyBankError, useBankSync } from "./useBankSync";
@@ -13,12 +13,38 @@ interface ExchangePublicTokenRequest {
   publicToken: string;
 }
 
+// Internal launcher: mounted ONLY once a real link token exists. Because
+// usePlaidLink embeds Plaid's link-initialize.js the moment it receives a
+// token, calling it with a placeholder ("") and then the real token embeds
+// the script twice ("embedded more than once" warning). Gating the hook
+// behind a non-null token — via this child that only mounts when the token
+// is set — keeps the embed to exactly one.
+function PlaidLauncher({
+  token,
+  onPublicToken,
+  onExit,
+}: {
+  token: string;
+  onPublicToken: (publicToken: string) => void;
+  onExit: () => void;
+}): null {
+  const { open, ready } = usePlaidLink({ token, onSuccess: onPublicToken, onExit });
+
+  useEffect(() => {
+    if (ready) open();
+  }, [ready, open]);
+
+  return null;
+}
+
 // Full bank-connection hook: Plaid Link connect flow + refresh. Mount this ONCE
-// (on Settings), not app-wide — usePlaidLink embeds Plaid's script. For a
-// refresh-only surface (e.g. the nav Sync button), use useBankSync instead.
+// (on Settings). For a refresh-only surface (e.g. the nav Sync button), use
+// useBankSync instead. Returns `launcher` — render it in your JSX so the Plaid
+// script embeds only when a token exists.
 export function useBankConnection(): {
   connect: () => Promise<void>;
   refresh: () => Promise<{ added: number }>;
+  launcher: React.ReactNode;
   busy: boolean;
   lastResult: string | null;
   error: string | null;
@@ -31,7 +57,7 @@ export function useBankConnection(): {
   // Reuse the sync-only hook for refresh + its lastResult (single source of truth).
   const { refresh, busy: syncBusy, lastResult, error: syncError } = useBankSync();
 
-  const onSuccess = useCallback(
+  const onPublicToken = useCallback(
     async (publicToken: string) => {
       try {
         setBusy(true);
@@ -42,13 +68,16 @@ export function useBankConnection(): {
         setError(friendlyBankError(err, "Couldn't finish connecting your bank. Please try again."));
       } finally {
         setBusy(false);
+        setLinkToken(null); // unmount launcher; a re-connect fetches a fresh token
       }
     },
     [functions],
   );
 
-  const config: PlaidLinkOptions = { token: linkToken || "", onSuccess };
-  const { open, ready } = usePlaidLink(config);
+  const onExit = useCallback(() => {
+    setBusy(false);
+    setLinkToken(null); // user closed Plaid without finishing — reset
+  }, []);
 
   const connect = useCallback(async () => {
     try {
@@ -63,16 +92,14 @@ export function useBankConnection(): {
     }
   }, [functions]);
 
-  useEffect(() => {
-    if (ready && linkToken) {
-      open();
-      setBusy(false);
-    }
-  }, [ready, linkToken, open]);
+  const launcher = linkToken ? (
+    <PlaidLauncher token={linkToken} onPublicToken={onPublicToken} onExit={onExit} />
+  ) : null;
 
   return {
     connect,
     refresh,
+    launcher,
     busy: busy || syncBusy,
     lastResult,
     error: error ?? syncError,
