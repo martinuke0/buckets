@@ -11,7 +11,7 @@ import {
   type NormalizedTxn,
 } from "./store";
 import { chooseBucket } from "../../lib/categorize/rules";
-import { categorizeWithGemini } from "./categorizer";
+import { categorizeBatchWithGemini } from "./categorizer";
 import { getFirestore } from "firebase-admin/firestore";
 
 // Build Plaid client from environment variables
@@ -90,47 +90,56 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   let geminiHits = 0;
   let noMatch = 0;
 
-  // Process each newly-created transaction
+  // 1) Income splits first (unchanged path).
   for (const txn of created) {
     if (txn.isIncome) {
-      // Income: auto-split only (existing path)
       await applyIncomeAdmin(uid, txn.amount, txn.providerTxnId);
+    }
+  }
+
+  // 2) Spends: try the cheap deterministic rules per-spend (free, offline). Anything
+  //    the rules can't place is collected and sent to Gemini in ONE bulk request —
+  //    per-transaction calls blow through the free-tier rate limit on a real sync.
+  const spends = created.filter((t) => !t.isIncome);
+  const ruleBucketByTxn = new Map<string, string>(); // providerTxnId -> bucketId (rule hits)
+  const needsAI: typeof spends = [];
+
+  for (const txn of spends) {
+    const decision = chooseBucket(txn.description, rules, bucketIds);
+    if ("bucketId" in decision) {
+      ruleBucketByTxn.set(txn.providerTxnId, decision.bucketId);
+      ruleHits++;
     } else {
-      // Spends: categorize via rules → Gemini. Categorization is advisory: a failure
-      // here must never abort the sync (income already split, txns already written).
-      // Leave the txn uncategorized (bucketId null) and continue.
-      try {
-        const decision = chooseBucket(txn.description, rules, bucketIds);
+      needsAI.push(txn);
+    }
+  }
 
-        let bucketId: string | null = null;
-        if ("bucketId" in decision) {
-          bucketId = decision.bucketId;
-          ruleHits++;
-        } else {
-          // Fallback to Gemini (already best-effort internally)
-          const geminiResult = await categorizeWithGemini(txn.description, bucketDocs);
-          bucketId = geminiResult.bucketId;
-          if (bucketId) {
-            geminiHits++;
-          } else {
-            noMatch++;
-          }
-        }
+  // One bulk Gemini call for all rule-misses (best-effort: all-null on failure).
+  const aiBuckets =
+    needsAI.length > 0
+      ? await categorizeBatchWithGemini(needsAI.map((t) => t.description), bucketDocs)
+      : [];
 
-        // Apply categorization if we have a bucket
-        if (bucketId) {
-          const magnitude = Math.abs(txn.amount);
-          await applySpendCategorization(uid, txn.providerTxnId, bucketId, magnitude);
-        }
-      } catch (err) {
-        noMatch++;
-        console.warn(`syncOneUser(${uid}): categorization skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err);
-      }
+  // 3) Apply every resolved categorization. A single apply failure must not abort
+  //    the rest (income already split, txns already written).
+  for (const txn of spends) {
+    let bucketId = ruleBucketByTxn.get(txn.providerTxnId) ?? null;
+    if (bucketId === null) {
+      const aiIdx = needsAI.indexOf(txn);
+      bucketId = aiIdx >= 0 ? aiBuckets[aiIdx] ?? null : null;
+      if (bucketId) geminiHits++;
+      else noMatch++;
+    }
+    if (!bucketId) continue;
+    try {
+      await applySpendCategorization(uid, txn.providerTxnId, bucketId, Math.abs(txn.amount));
+    } catch (err) {
+      console.warn(`syncOneUser(${uid}): apply skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err);
     }
   }
 
   console.log(
-    `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch}`
+    `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch} (bulk AI calls: ${needsAI.length > 0 ? 1 : 0})`
   );
 
   // Record last-synced for the client-visible status line (best-effort).
