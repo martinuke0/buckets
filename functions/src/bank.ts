@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { PlaidAdapter } from "../../lib/bank/plaidAdapter";
-import { saveConnection, listConnectedUsers, setBankMeta, seedDefaultBucketsIfEmpty } from "./store";
+import { saveConnection, listConnectedUsers, setBankMeta, seedDefaultBucketsIfEmpty, anchorBucketsToBalance } from "./store";
 import { syncOneUser } from "./syncCore";
 
 // Shared Plaid client factory
@@ -72,6 +72,15 @@ export const exchangePublicToken = onCall<{ publicToken: string }>(
 
     // Ensure the user has buckets before the first sync so income can split.
     await seedDefaultBucketsIfEmpty(request.auth.uid);
+
+    // Anchor buckets to the real balance (first connect only), before the first sync.
+    try {
+      const balance = await adapter.getBalance(accessToken);
+      await setBankMeta(request.auth.uid, { currentBalance: balance });
+      await anchorBucketsToBalance(request.auth.uid, balance, { onlyIfFirstConnect: true });
+    } catch (err) {
+      console.warn(`exchangePublicToken: balance/anchor skipped:`, err instanceof Error ? err.message : err);
+    }
 
     // Sync immediately so the just-connected account populates
     await syncOneUser(request.auth.uid);

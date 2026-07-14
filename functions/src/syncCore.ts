@@ -142,8 +142,15 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
     `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch} (bulk AI calls: ${needsAI.length > 0 ? 1 : 0})`
   );
 
-  // Record last-synced for the client-visible status line (best-effort).
-  await setBankMeta(uid, { lastSyncedAt: new Date().toISOString() });
+  // Refresh the real balance for the drift indicator (best-effort; never re-anchor here).
+  let currentBalance: number | undefined;
+  try {
+    const conns = connections; // already fetched at top
+    if (conns.length > 0) currentBalance = await adapter.getBalance(conns[0].accessToken);
+  } catch (err) {
+    console.warn(`syncOneUser(${uid}): balance refresh skipped:`, err instanceof Error ? err.message : err);
+  }
+  await setBankMeta(uid, { lastSyncedAt: new Date().toISOString(), ...(currentBalance !== undefined ? { currentBalance } : {}) });
 
   return { added: created.length };
 }
