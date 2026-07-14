@@ -73,17 +73,30 @@ export const exchangePublicToken = onCall<{ publicToken: string }>(
     // Ensure the user has buckets before the first sync so income can split.
     await seedDefaultBucketsIfEmpty(request.auth.uid);
 
-    // Anchor buckets to the real balance (first connect only), before the first sync.
+    // Fetch the real balance (best-effort; used for anchor after the catch-up sync).
+    let balance: number | undefined;
     try {
-      const balance = await adapter.getBalance(accessToken);
+      balance = await adapter.getBalance(accessToken);
       await setBankMeta(request.auth.uid, { currentBalance: balance });
-      await anchorBucketsToBalance(request.auth.uid, balance, { onlyIfFirstConnect: true });
     } catch (err) {
-      console.warn(`exchangePublicToken: balance/anchor skipped:`, err instanceof Error ? err.message : err);
+      console.warn(`exchangePublicToken: balance fetch skipped:`, err instanceof Error ? err.message : err);
     }
 
-    // Sync immediately so the just-connected account populates
-    await syncOneUser(request.auth.uid);
+    // Catch-up sync: writes txns + categorizes spends (no income prompts; the anchor
+    // will replace buckets with the clean balance partition, so prompting would
+    // let the user double-add historical income already reflected in the balance).
+    await syncOneUser(request.auth.uid, { suppressIncomePrompts: true });
+
+    // Anchor LAST: REPLACE buckets with the balance partition (first connect only).
+    // Because this runs AFTER the catch-up sync, historical spends cannot double-count
+    // (the anchor overwrites any drawdowns from the catch-up with the clean partition).
+    if (balance !== undefined) {
+      try {
+        await anchorBucketsToBalance(request.auth.uid, balance, { onlyIfFirstConnect: true });
+      } catch (err) {
+        console.warn(`exchangePublicToken: anchor skipped:`, err instanceof Error ? err.message : err);
+      }
+    }
 
     return { ok: true };
   }

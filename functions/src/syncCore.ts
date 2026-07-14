@@ -45,9 +45,10 @@ function createPlaidAdapter(): PlaidAdapter {
  * - Writes new transactions to Firestore
  * - Auto-splits income transactions into user's buckets
  *
+ * @param opts.suppressIncomePrompts - skip writePendingIncome for income (catch-up sync)
  * @returns { added: number } - count of newly-created transactions
  */
-export async function syncOneUser(uid: string): Promise<{ added: number }> {
+export async function syncOneUser(uid: string, opts?: { suppressIncomePrompts?: boolean }): Promise<{ added: number }> {
   const adapter = createPlaidAdapter();
   const connections = await listConnections(uid);
 
@@ -91,14 +92,18 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   let noMatch = 0;
 
   // 1) Income is NOT auto-split — record pending so the user confirms the split.
-  for (const txn of created) {
-    if (txn.isIncome) {
-      await writePendingIncome(uid, {
-        incomeTxId: txn.providerTxnId,
-        amount: txn.amount,
-        description: txn.description,
-        bookedAt: txn.bookedAt,
-      });
+  //    EXCEPT on catch-up syncs: the anchor will replace buckets with the balance
+  //    partition, so prompting would let the user double-add historical income.
+  if (!opts?.suppressIncomePrompts) {
+    for (const txn of created) {
+      if (txn.isIncome) {
+        await writePendingIncome(uid, {
+          incomeTxId: txn.providerTxnId,
+          amount: txn.amount,
+          description: txn.description,
+          bookedAt: txn.bookedAt,
+        });
+      }
     }
   }
 

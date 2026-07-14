@@ -37,6 +37,7 @@ export default function Page() {
   const { pending } = usePendingIncome();
   const [showDialog, setShowDialog] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [reanchorBusy, setReanchorBusy] = useState(false);
 
   if (loading) {
     return (
@@ -71,11 +72,20 @@ export default function Page() {
           {/* Tolerate a 1-cent rounding artifact; only nudge re-anchor on real drift. */}
           {Math.abs(bankStatus.currentBalance - safeToSpend) > 1 && (
             <button
-              onClick={() => { if (user && bankStatus.currentBalance !== undefined) void anchorBucketsToBalance(user.uid, bankStatus.currentBalance); }}
+              onClick={async () => {
+                if (!user || bankStatus.currentBalance === undefined || reanchorBusy) return;
+                setReanchorBusy(true);
+                try {
+                  await anchorBucketsToBalance(user.uid, bankStatus.currentBalance);
+                } finally {
+                  setReanchorBusy(false);
+                }
+              }}
+              disabled={reanchorBusy}
               className="rounded-lg py-1 px-2 text-xs font-semibold"
-              style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)", cursor: "pointer" }}
+              style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)", cursor: reanchorBusy ? "not-allowed" : "pointer", opacity: reanchorBusy ? 0.6 : 1 }}
             >
-              Re-sync buckets to balance
+              {reanchorBusy ? "Re-syncing..." : "Re-sync buckets to balance"}
             </button>
           )}
         </div>

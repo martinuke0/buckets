@@ -143,11 +143,22 @@ export async function confirmPendingIncome(uid: string, pendingId: string, rules
 
 // Re-anchor (drift button): REPLACE bucket balances with the balance partitioned by %.
 export async function anchorBucketsToBalance(uid: string, balanceCents: number): Promise<void> {
-  const buckets = await listBuckets(uid);
-  const rules = deriveRules(buckets);
-  const shares = balanceShares(balanceCents, rules);
+  // Pre-transaction: get bucket IDs to know which docs to fetch in the transaction
+  const bucketIds = (await listBuckets(uid)).map((b) => b.id);
+
   const db = getDb();
   await runTransaction(db, async (tx) => {
+    // Read buckets INSIDE the transaction to avoid concurrent percent/spend changes
+    // committing a stale partition (mirroring the server hardening).
+    const bucketRefs = bucketIds.map((id) => doc(db, bucketsCol(uid), id));
+    const bucketSnaps = await Promise.all(bucketRefs.map((ref) => tx.get(ref)));
+
+    const buckets: Bucket[] = bucketSnaps
+      .filter((snap) => snap.exists())
+      .map((snap) => ({ id: snap.id, ...(snap.data() as Omit<Bucket, "id">) }));
+
+    const rules = deriveRules(buckets);
+    const shares = balanceShares(balanceCents, rules);
     for (const [bucketId, cents] of shares) {
       tx.update(doc(db, bucketsCol(uid), bucketId), { remaining: cents, allocated: cents });
     }
