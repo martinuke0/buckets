@@ -34,4 +34,5 @@ it("is a no-op when already resolved", async () => {
   txGet.mockResolvedValue({ exists: () => true, data: () => ({ amount: 100000, resolved: true }) });
   await confirmPendingIncome("u1", "inc1", rules);
   expect(txUpdate).not.toHaveBeenCalled();
+  expect(txSet).not.toHaveBeenCalled(); // no orphan allocation docs on the no-op path
 });

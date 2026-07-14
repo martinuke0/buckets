@@ -2,7 +2,7 @@ import {
   collection, doc, getDocs, writeBatch, runTransaction, increment,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase/client";
-import { bucketsCol, txCol, allocationsCol } from "@/lib/model/paths";
+import { bucketsCol, txCol, allocationsCol, pendingIncomeCol } from "@/lib/model/paths";
 import type { Bucket, Allocation } from "@/lib/model/types";
 import type { Cents } from "@/lib/model/money";
 import { splitIncome, type SplitRule } from "@/lib/split/engine";
@@ -127,7 +127,7 @@ export async function deleteBucketAndRedistribute(uid: string, bucketId: string)
 export async function confirmPendingIncome(uid: string, pendingId: string, rules: SplitRule[]): Promise<void> {
   const db = getDb();
   await runTransaction(db, async (tx) => {
-    const pendingRef = doc(db, `users/${uid}/pendingIncome/${pendingId}`);
+    const pendingRef = doc(db, `${pendingIncomeCol(uid)}/${pendingId}`);
     const snap = await tx.get(pendingRef);
     if (!snap.exists() || snap.data()?.resolved === true) return;
     const amount = snap.data()?.amount as number;

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { getDb } from "@/lib/firebase/client";
+import { pendingIncomeCol } from "@/lib/model/paths";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export interface PendingIncome {
@@ -14,7 +15,7 @@ export function usePendingIncome(): { pending: PendingIncome[]; loading: boolean
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!user) return;
-    const q = collection(getDb(), `users/${user.uid}/pendingIncome`);
+    const q = collection(getDb(), pendingIncomeCol(user.uid));
     return onSnapshot(q, (snap) => {
       setPending(
         snap.docs
