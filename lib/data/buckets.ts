@@ -7,6 +7,7 @@ import type { Bucket, Allocation } from "@/lib/model/types";
 import type { Cents } from "@/lib/model/money";
 import { splitIncome, type SplitRule } from "@/lib/split/engine";
 import { deleteBucket } from "@/lib/buckets/edit";
+import { balanceShares } from "@/lib/data/anchor";
 
 export function deriveRules(buckets: Bucket[]): SplitRule[] {
   return buckets.map((b) => ({ bucketId: b.id, percent: b.percent }));
@@ -120,5 +121,35 @@ export async function deleteBucketAndRedistribute(uid: string, bucketId: string)
       remaining: updatedRecipient.remaining,
       allocated: updatedRecipient.allocated,
     });
+  });
+}
+
+export async function confirmPendingIncome(uid: string, pendingId: string, rules: SplitRule[]): Promise<void> {
+  const db = getDb();
+  await runTransaction(db, async (tx) => {
+    const pendingRef = doc(db, `users/${uid}/pendingIncome/${pendingId}`);
+    const snap = await tx.get(pendingRef);
+    if (!snap.exists() || snap.data()?.resolved === true) return;
+    const amount = snap.data()?.amount as number;
+    const splits = splitIncome(amount, rules);
+    for (const s of splits) {
+      const allocRef = doc(collection(db, allocationsCol(uid)));
+      tx.set(allocRef, { bucketId: s.bucketId, amount: s.amount, incomeTxId: pendingId, createdAt: new Date().toISOString() });
+      tx.update(doc(db, bucketsCol(uid), s.bucketId), { remaining: increment(s.amount), allocated: increment(s.amount) });
+    }
+    tx.update(pendingRef, { resolved: true });
+  });
+}
+
+// Re-anchor (drift button): REPLACE bucket balances with the balance partitioned by %.
+export async function anchorBucketsToBalance(uid: string, balanceCents: number): Promise<void> {
+  const buckets = await listBuckets(uid);
+  const rules = deriveRules(buckets);
+  const shares = balanceShares(balanceCents, rules);
+  const db = getDb();
+  await runTransaction(db, async (tx) => {
+    for (const [bucketId, cents] of shares) {
+      tx.update(doc(db, bucketsCol(uid), bucketId), { remaining: cents, allocated: cents });
+    }
   });
 }
