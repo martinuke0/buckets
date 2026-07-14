@@ -330,14 +330,18 @@ export async function anchorBucketsToBalance(
       const metaSnap = await tx.get(metaRef);
       if (metaSnap.exists && metaSnap.get("anchoredAt")) return false;
     }
-    const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+    // Transactional read (tx.get, NOT a plain .get()) so a concurrent percent/bucket
+    // change arms contention and forces a retry — critical for the flag-less client
+    // re-anchor path that runs alongside spends/rebalances (would otherwise commit a
+    // stale partition and break Σ remaining == balance).
+    const bucketsSnap = await tx.get(db.collection(`users/${uid}/buckets`));
     if (bucketsSnap.empty) return false;
     const rules: SplitRule[] = bucketsSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
       bucketId: d.id,
       percent: d.get("percent") as number,
     }));
     const total = rules.reduce((s, r) => s + r.percent, 0);
-    if (Math.abs(total - 100) >= 0.001) return false;
+    if (Math.abs(total - 100) > 0.001) return false;
     let allocs;
     try {
       allocs = splitIncome(balanceCents, rules);
