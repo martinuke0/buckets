@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_BUCKETS as SERVER } from "./defaultBuckets";
+// SERVER = the functions-local copy (functions/src is CJS, so this test must live
+// in the root ESM tree and reach into it by relative path — a vitest file cannot
+// live under functions/ where package.json is "type":"commonjs").
+import { DEFAULT_BUCKETS as SERVER } from "../../functions/src/defaultBuckets";
 import { DEFAULT_BUCKETS as CLIENT } from "@/lib/data/defaultBuckets";
 
 describe("default bucket parity (client vs functions)", () => {

@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    // Never collect compiled Cloud Functions output as tests: functions/lib holds
+    // CJS build artifacts (gitignored) that can't be imported by the ESM vitest.
+    exclude: ["**/node_modules/**", "**/dist/**", "functions/lib/**"],
     // ponytail: single fork — jsdom+firebase across parallel workers OOMed the 4GB heap.
     // Revisit (threads/isolate) only if suite runtime becomes a problem.
     pool: "forks",
