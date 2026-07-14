@@ -32,14 +32,12 @@ interface BucketSetupProps {
 
 function SortableBucketRow({
   bucket,
-  href,
   onPercentChange,
   onRename,
   onRecolor,
   onDelete,
 }: {
   bucket: Bucket;
-  href?: string;
   onPercentChange: (percent: number) => void;
   onRename: (newName: string) => void;
   onRecolor: (colorIndex: number) => void;
@@ -58,7 +56,6 @@ function SortableBucketRow({
     <div ref={setNodeRef} style={style} {...attributes}>
       <BucketRow
         bucket={bucket}
-        href={href}
         onPercentChange={onPercentChange}
         onRename={onRename}
         onRecolor={onRecolor}
@@ -157,7 +154,6 @@ export function BucketSetup({ initial, premium, onSave, onDelete, onUpgrade }: B
               <SortableBucketRow
                 key={bucket.id}
                 bucket={bucket}
-                href={`/dashboard/bucket/${bucket.id}`}
                 onPercentChange={(percent) => handlePercentChange(bucket.id, percent)}
                 onRename={(newName) => handleRename(bucket.id, newName)}
                 onRecolor={(colorIndex) => handleRecolor(bucket.id, colorIndex)}

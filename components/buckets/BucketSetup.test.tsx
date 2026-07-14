@@ -61,4 +61,18 @@ describe("BucketSetup", () => {
     fireEvent.change(rentInput, { target: { value: "90" } });
     expect(screen.getByTestId("total-percent")).toHaveTextContent("100");
   });
+  it("renders bucket names as plain text without links on the Buckets tab", () => {
+    render(<BucketSetup initial={initial} premium={false} onSave={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.queryByRole("link", { name: /rent/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /food/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Rent")).toBeInTheDocument();
+    expect(screen.getByText("Food")).toBeInTheDocument();
+  });
+  it("exposes edit menu and percent input without link interference", () => {
+    render(<BucketSetup initial={initial} premium={false} onSave={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByLabelText(/rent percentage/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/food percentage/i)).toBeInTheDocument();
+    const menuButtons = screen.getAllByRole("button", { name: /open menu/i });
+    expect(menuButtons).toHaveLength(2);
+  });
 });
