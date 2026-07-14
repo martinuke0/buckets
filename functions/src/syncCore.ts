@@ -7,6 +7,7 @@ import {
   applyIncomeAdmin,
   getCategoryRules,
   applySpendCategorization,
+  setBankMeta,
   type NormalizedTxn,
 } from "./store";
 import { chooseBucket } from "../../lib/categorize/rules";
@@ -95,28 +96,35 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
       // Income: auto-split only (existing path)
       await applyIncomeAdmin(uid, txn.amount, txn.providerTxnId);
     } else {
-      // Spends: categorize via rules → Gemini
-      const decision = chooseBucket(txn.description, rules, bucketIds);
+      // Spends: categorize via rules → Gemini. Categorization is advisory: a failure
+      // here must never abort the sync (income already split, txns already written).
+      // Leave the txn uncategorized (bucketId null) and continue.
+      try {
+        const decision = chooseBucket(txn.description, rules, bucketIds);
 
-      let bucketId: string | null = null;
-      if ("bucketId" in decision) {
-        bucketId = decision.bucketId;
-        ruleHits++;
-      } else {
-        // Fallback to Gemini
-        const geminiResult = await categorizeWithGemini(txn.description, bucketDocs);
-        bucketId = geminiResult.bucketId;
-        if (bucketId) {
-          geminiHits++;
+        let bucketId: string | null = null;
+        if ("bucketId" in decision) {
+          bucketId = decision.bucketId;
+          ruleHits++;
         } else {
-          noMatch++;
+          // Fallback to Gemini (already best-effort internally)
+          const geminiResult = await categorizeWithGemini(txn.description, bucketDocs);
+          bucketId = geminiResult.bucketId;
+          if (bucketId) {
+            geminiHits++;
+          } else {
+            noMatch++;
+          }
         }
-      }
 
-      // Apply categorization if we have a bucket
-      if (bucketId) {
-        const magnitude = Math.abs(txn.amount);
-        await applySpendCategorization(uid, txn.providerTxnId, bucketId, magnitude);
+        // Apply categorization if we have a bucket
+        if (bucketId) {
+          const magnitude = Math.abs(txn.amount);
+          await applySpendCategorization(uid, txn.providerTxnId, bucketId, magnitude);
+        }
+      } catch (err) {
+        noMatch++;
+        console.warn(`syncOneUser(${uid}): categorization skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err);
       }
     }
   }
@@ -124,6 +132,9 @@ export async function syncOneUser(uid: string): Promise<{ added: number }> {
   console.log(
     `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch}`
   );
+
+  // Record last-synced for the client-visible status line (best-effort).
+  await setBankMeta(uid, { lastSyncedAt: new Date().toISOString() });
 
   return { added: created.length };
 }

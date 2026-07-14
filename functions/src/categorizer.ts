@@ -14,28 +14,32 @@ export async function categorizeWithGemini(
     `Buckets:\n${buckets.map((b) => `- ${b.id}: ${b.name}`).join("\n")}\n` +
     `If none clearly fit, return bucketId "none".`;
 
-  const res = await ai.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          bucketId: { type: Type.STRING, enum: [...ids, "none"] },
-          confidence: { type: Type.NUMBER },
-        },
-        required: ["bucketId", "confidence"],
-      },
-    },
-  });
-
+  // Best-effort: categorization is advisory. Any Gemini failure (rate limit 429,
+  // network, bad JSON) must degrade to "uncategorized" — never throw, or it would
+  // crash the money-critical sync/connect flow. AI advises, code disposes.
   try {
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            bucketId: { type: Type.STRING, enum: [...ids, "none"] },
+            confidence: { type: Type.NUMBER },
+          },
+          required: ["bucketId", "confidence"],
+        },
+      },
+    });
+
     const parsed = JSON.parse(res.text ?? "{}");
     const bucketId = ids.includes(parsed.bucketId) ? parsed.bucketId : null;
     const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
     return { bucketId, confidence };
-  } catch {
+  } catch (err) {
+    console.warn(`categorizeWithGemini: falling back to uncategorized:`, err instanceof Error ? err.message : err);
     return { bucketId: null, confidence: 0 };
   }
 }

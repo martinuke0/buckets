@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useTransactions } from "@/lib/data/useTransactions";
 import { useBankSync } from "@/lib/bank/useBankSync";
+import { useBankStatus } from "@/lib/data/useBankStatus";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SafeToSpendHero } from "@/components/buckets/SafeToSpendHero";
 import { BucketCard } from "@/components/buckets/BucketCard";
@@ -12,10 +13,22 @@ import { SimulateIncomeDialog } from "./SimulateIncomeDialog";
 import { recategorize } from "@/lib/data/recategorize";
 import { SectionLabel } from "@/components/ui/primitives";
 
+// Coarse "x ago" for the bank status line. Display-only; minute granularity is fine.
+function timeAgo(iso: string): string {
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function Page() {
   const { buckets, loading } = useBuckets();
   const { transactions, loading: txLoading } = useTransactions();
   const { refresh, busy: syncBusy, lastResult, error } = useBankSync();
+  const { status: bankStatus } = useBankStatus();
   const { user } = useAuth();
   const [showDialog, setShowDialog] = useState(false);
 
@@ -91,6 +104,25 @@ export default function Page() {
           >
             {syncBusy ? "Syncing..." : "Refresh"}
           </button>
+        </div>
+
+        <div style={{ marginBottom: "0.75rem", fontSize: "0.8125rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {bankStatus?.connectedAt ? (
+            <>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)", flexShrink: 0 }} />
+              <span style={{ color: "var(--color-muted)" }}>
+                Bank connected{bankStatus.lastSyncedAt ? ` · synced ${timeAgo(bankStatus.lastSyncedAt)}` : ""}
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-muted)", flexShrink: 0 }} />
+              <span style={{ color: "var(--color-muted)" }}>No bank connected</span>
+              <Link href="/settings" style={{ color: "var(--color-success)", fontWeight: 600 }}>
+                Connect
+              </Link>
+            </>
+          )}
         </div>
         {error && (
           <div style={{ color: "var(--color-danger)", marginBottom: "0.5rem", fontSize: "0.875rem" }}>

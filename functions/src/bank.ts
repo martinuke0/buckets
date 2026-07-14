@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { PlaidAdapter } from "../../lib/bank/plaidAdapter";
-import { saveConnection, listConnectedUsers } from "./store";
+import { saveConnection, listConnectedUsers, setBankMeta } from "./store";
 import { syncOneUser } from "./syncCore";
 
 // Shared Plaid client factory
@@ -65,6 +65,10 @@ export const exchangePublicToken = onCall<{ publicToken: string }>(
 
     // Save the connection
     await saveConnection(request.auth.uid, itemId, accessToken);
+
+    // Mark connected for the client status line (before sync, so the UI reflects
+    // the connection even if the immediate sync has a transient hiccup).
+    await setBankMeta(request.auth.uid, { connectedAt: new Date().toISOString() });
 
     // Sync immediately so the just-connected account populates
     await syncOneUser(request.auth.uid);

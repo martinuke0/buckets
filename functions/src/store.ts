@@ -38,6 +38,18 @@ export async function listConnections(
   }));
 }
 
+// Client-readable bank status marker. bankConnections/** is deny-all to clients
+// (holds access tokens), so we mirror non-sensitive status to users/{uid}/meta/bank
+// (readable by the owner per firestore.rules). No tokens ever land here.
+export async function setBankMeta(
+  uid: string,
+  fields: { connectedAt?: string; lastSyncedAt?: string }
+): Promise<void> {
+  await getFirestore()
+    .doc(`users/${uid}/meta/bank`)
+    .set(fields, { merge: true });
+}
+
 export async function saveCursor(
   uid: string,
   itemId: string,
