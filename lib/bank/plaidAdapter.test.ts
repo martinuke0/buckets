@@ -30,6 +30,7 @@ describe("PlaidAdapter.syncTransactions", () => {
         added: [{ transaction_id: "t1", amount: 5, name: "Shop", date: "2026-07-10", iso_currency_code: "EUR" }],
         next_cursor: "c2", has_more: false,
       } }),
+      accountsBalanceGet: async () => ({ data: { accounts: [] } }),
     };
     const adapter = new PlaidAdapter(client);
     const out = await adapter.syncTransactions("at", null);

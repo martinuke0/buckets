@@ -29,6 +29,9 @@ interface PlaidClientLike {
   transactionsSync(req: { access_token: string; cursor?: string }): Promise<{
     data: { added: PlaidLikeTxn[]; next_cursor: string; has_more: boolean };
   }>;
+  accountsBalanceGet(req: { access_token: string }): Promise<{
+    data: { accounts: { type: string; balances: { current: number | null } }[] };
+  }>;
 }
 
 export class PlaidAdapter implements BankProvider {
@@ -60,5 +63,13 @@ export class PlaidAdapter implements BankProvider {
       nextCursor: res.data.next_cursor,
       hasMore: res.data.has_more,
     };
+  }
+
+  async getBalance(accessToken: string): Promise<number> {
+    const res = await this.client.accountsBalanceGet({ access_token: accessToken });
+    const total = res.data.accounts
+      .filter((a) => a.type === "depository")
+      .reduce((sum, a) => sum + (a.balances.current ?? 0), 0);
+    return toCents(total);
   }
 }

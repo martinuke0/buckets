@@ -15,4 +15,5 @@ export interface BankProvider {
     accessToken: string,
     cursor: string | null,
   ): Promise<{ added: NormalizedTxn[]; nextCursor: string; hasMore: boolean }>;
+  getBalance(accessToken: string): Promise<number>;
 }
