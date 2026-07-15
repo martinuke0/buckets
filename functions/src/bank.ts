@@ -4,6 +4,7 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { PlaidAdapter } from "../../lib/bank/plaidAdapter";
 import { saveConnection, listConnectedUsers, setBankMeta, seedDefaultBucketsIfEmpty, anchorBucketsToBalance } from "./store";
 import { syncOneUser } from "./syncCore";
+import { logEvent } from "./logging";
 
 // Shared Plaid client factory
 function createPlaidAdapter(): PlaidAdapter {
@@ -38,10 +39,19 @@ export const createLinkToken = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
-  const adapter = createPlaidAdapter();
-  const linkToken = await adapter.createLinkToken(request.auth.uid);
+  const uid = request.auth.uid;
+  logEvent("createLinkToken", { uid, outcome: "start" });
 
-  return { linkToken };
+  try {
+    const adapter = createPlaidAdapter();
+    const linkToken = await adapter.createLinkToken(uid);
+
+    logEvent("createLinkToken", { uid, outcome: "ok" });
+    return { linkToken };
+  } catch (err) {
+    logEvent("createLinkToken", { uid, outcome: "error", error: err });
+    throw err;
+  }
 });
 
 /**
@@ -55,50 +65,59 @@ export const exchangePublicToken = onCall<{ publicToken: string }>(
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
 
+    const uid = request.auth.uid;
+    logEvent("exchangePublicToken", { uid, outcome: "start" });
+
     const { publicToken } = request.data;
     if (!publicToken) {
       throw new HttpsError("invalid-argument", "publicToken is required");
     }
 
-    const adapter = createPlaidAdapter();
-    const { accessToken, itemId } = await adapter.exchangePublicToken(publicToken);
-
-    // Save the connection
-    await saveConnection(request.auth.uid, itemId, accessToken);
-
-    // Mark connected for the client status line (before sync, so the UI reflects
-    // the connection even if the immediate sync has a transient hiccup).
-    await setBankMeta(request.auth.uid, { connectedAt: new Date().toISOString() });
-
-    // Ensure the user has buckets before the first sync so income can split.
-    await seedDefaultBucketsIfEmpty(request.auth.uid);
-
-    // Fetch the real balance (best-effort; used for anchor after the catch-up sync).
-    let balance: number | undefined;
     try {
-      balance = await adapter.getBalance(accessToken);
-      await setBankMeta(request.auth.uid, { currentBalance: balance });
-    } catch (err) {
-      console.warn(`exchangePublicToken: balance fetch skipped:`, err instanceof Error ? err.message : err);
-    }
+      const adapter = createPlaidAdapter();
+      const { accessToken, itemId } = await adapter.exchangePublicToken(publicToken);
 
-    // Catch-up sync: writes txns + categorizes spends (no income prompts; the anchor
-    // will replace buckets with the clean balance partition, so prompting would
-    // let the user double-add historical income already reflected in the balance).
-    await syncOneUser(request.auth.uid, { recordOnly: true });
+      // Save the connection
+      await saveConnection(uid, itemId, accessToken);
 
-    // Anchor LAST: REPLACE buckets with the balance partition (first connect only).
-    // Because this runs AFTER the catch-up sync, historical spends cannot double-count
-    // (the anchor overwrites any drawdowns from the catch-up with the clean partition).
-    if (balance !== undefined) {
+      // Mark connected for the client status line (before sync, so the UI reflects
+      // the connection even if the immediate sync has a transient hiccup).
+      await setBankMeta(uid, { connectedAt: new Date().toISOString() });
+
+      // Ensure the user has buckets before the first sync so income can split.
+      await seedDefaultBucketsIfEmpty(uid);
+
+      // Fetch the real balance (best-effort; used for anchor after the catch-up sync).
+      let balance: number | undefined;
       try {
-        await anchorBucketsToBalance(request.auth.uid, balance, { onlyIfFirstConnect: true });
+        balance = await adapter.getBalance(accessToken);
+        await setBankMeta(uid, { currentBalance: balance });
       } catch (err) {
-        console.warn(`exchangePublicToken: anchor skipped:`, err instanceof Error ? err.message : err);
+        console.warn(`exchangePublicToken: balance fetch skipped:`, err instanceof Error ? err.message : err);
       }
-    }
 
-    return { ok: true };
+      // Catch-up sync: writes txns + categorizes spends (no income prompts; the anchor
+      // will replace buckets with the clean balance partition, so prompting would
+      // let the user double-add historical income already reflected in the balance).
+      await syncOneUser(uid, { recordOnly: true });
+
+      // Anchor LAST: REPLACE buckets with the balance partition (first connect only).
+      // Because this runs AFTER the catch-up sync, historical spends cannot double-count
+      // (the anchor overwrites any drawdowns from the catch-up with the clean partition).
+      if (balance !== undefined) {
+        try {
+          await anchorBucketsToBalance(uid, balance, { onlyIfFirstConnect: true });
+        } catch (err) {
+          console.warn(`exchangePublicToken: anchor skipped:`, err instanceof Error ? err.message : err);
+        }
+      }
+
+      logEvent("exchangePublicToken", { uid, outcome: "ok" });
+      return { ok: true };
+    } catch (err) {
+      logEvent("exchangePublicToken", { uid, outcome: "error", error: err });
+      throw err;
+    }
   }
 );
 
@@ -112,7 +131,17 @@ export const syncTransactions = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated");
   }
 
-  return await syncOneUser(request.auth.uid);
+  const uid = request.auth.uid;
+  logEvent("syncTransactions", { uid, outcome: "start" });
+
+  try {
+    const result = await syncOneUser(uid);
+    logEvent("syncTransactions", { uid, outcome: "ok", added: result.added });
+    return result;
+  } catch (err) {
+    logEvent("syncTransactions", { uid, outcome: "error", error: err });
+    throw err;
+  }
 });
 
 /**
