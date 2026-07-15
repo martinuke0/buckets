@@ -395,3 +395,18 @@ export async function anchorBucketsToBalance(
     return true;
   });
 }
+
+export async function listCoachMemories(uid: string): Promise<string[]> {
+  const snap = await getFirestore().collection(`users/${uid}/coachMemories`).get();
+  return snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => d.get("text") as string);
+}
+
+export async function writeCoachMemory(uid: string, text: string): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const db = getFirestore();
+  const col = db.collection(`users/${uid}/coachMemories`);
+  const existing = await col.where("text", "==", trimmed).limit(1).get();
+  if (!existing.empty) return; // dedupe exact repeats
+  await col.doc().set({ text: trimmed, createdAt: new Date().toISOString() });
+}

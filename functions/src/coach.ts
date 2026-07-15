@@ -2,8 +2,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
 import { buildCoachContext } from "./coachContext";
+import { buildSpendSummary } from "./spendSummary";
 import { validateSuggestion, type CoachReply, type CoachSuggestion } from "../../lib/coach/suggestion";
-import { applyRebalance } from "./store";
+import { applyRebalance, listCoachMemories, writeCoachMemory } from "./store";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -44,21 +45,28 @@ export const coachReply = onCall<CoachReplyRequest>(async (request) => {
     allocated: d.get("allocated") as number,
   }));
 
-  // Read a few recent transactions
+  // Current-month transactions for the spend summary (spends + income; summary filters).
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
   const txnsSnap = await db
     .collection(`users/${uid}/transactions`)
-    .orderBy("bookedAt", "desc")
-    .limit(5)
+    .where("bookedAt", ">=", monthStart)
     .get();
-
-  const recentTxns = txnsSnap.docs.map((d) => ({
+  const txns = txnsSnap.docs.map((d) => ({
     description: d.get("description") as string,
     amount: d.get("amount") as number,
     bookedAt: d.get("bookedAt") as string,
+    bucketId: (d.get("bucketId") as string | null) ?? null,
+    isIncome: (d.get("isIncome") as boolean) ?? false,
   }));
 
-  // Build context for Gemini
-  const { prompt, bucketIds } = buildCoachContext(buckets, recentTxns);
+  const memories = await listCoachMemories(uid);
+  const summary = buildSpendSummary(
+    buckets.map((b) => ({ id: b.id, name: b.name, allocated: b.allocated, remaining: b.remaining })),
+    txns,
+    now,
+  );
+  const { prompt, bucketIds } = buildCoachContext(summary, memories);
 
   // Construct the full prompt with user message
   const fullPrompt = `${prompt}\n\nUser: ${message}\n\nCoach:`;
@@ -86,6 +94,7 @@ export const coachReply = onCall<CoachReplyRequest>(async (request) => {
             },
             required: ["type", "fromBucketId", "toBucketId", "amount"],
           },
+          memory: { type: Type.STRING, nullable: true },
         },
         required: ["reply"],
       },
@@ -100,6 +109,15 @@ export const coachReply = onCall<CoachReplyRequest>(async (request) => {
     throw new HttpsError("internal", "Failed to parse AI response");
   }
 
+  // Persist memory if present (best-effort, before suggestion validation)
+  if (typeof parsed.memory === "string" && parsed.memory.trim()) {
+    try {
+      await writeCoachMemory(uid, parsed.memory);
+    } catch (err) {
+      console.warn(`coachReply: writeCoachMemory skipped:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   // Validate suggestion if present
   if (parsed.suggestion) {
     const validation = validateSuggestion(
@@ -108,7 +126,7 @@ export const coachReply = onCall<CoachReplyRequest>(async (request) => {
     );
 
     if (!validation.ok) {
-      // Drop invalid suggestion - return reply only
+      // Drop invalid suggestion - return reply only (memory already persisted)
       console.warn(
         `coachReply: dropping invalid suggestion for user ${uid}: ${validation.reason}`
       );
