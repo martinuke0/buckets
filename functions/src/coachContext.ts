@@ -1,66 +1,43 @@
-interface Bucket {
-  id: string;
-  name: string;
-  remaining: number;
-  allocated: number;
-}
+import type { SpendSummary } from "./spendSummary";
 
-interface Transaction {
-  description: string;
-  amount: number;
-  bookedAt: string;
-}
+const euros = (cents: number): string => `€${(cents / 100).toFixed(2)}`;
 
 export function buildCoachContext(
-  buckets: Bucket[],
-  recentTxns: Transaction[]
+  summary: SpendSummary,
+  memories: string[],
 ): { prompt: string; bucketIds: string[] } {
-  const bucketIds = buckets.map((b) => b.id);
+  const bucketIds = summary.buckets.map((b) => b.id);
 
-  // Format amounts from cents to euros
-  const formatEuros = (cents: number): string => {
-    const euros = cents / 100;
-    return `€${euros.toFixed(2)}`;
-  };
-
-  // Build bucket summary
-  const bucketSummary = buckets
+  const bucketLines = summary.buckets
     .map((b) => {
-      return `- ${b.name}: ${formatEuros(b.remaining)} remaining of ${formatEuros(b.allocated)} allocated`;
+      const base = `- ${b.name}: ${euros(b.spentThisMonth)} spent of ${euros(b.allocated)} (${b.pctUsed}%), ${euros(b.remaining)} remaining`;
+      const notable = b.notable.length
+        ? ` — notable: ${b.notable.map((n) => `${n.description} ${euros(n.amount)}`).join(", ")}`
+        : "";
+      return base + notable;
     })
     .join("\n");
 
-  // Build transaction summary (limited to most recent)
-  const txnSummary =
-    recentTxns.length > 0
-      ? recentTxns
-          .slice(0, 5)
-          .map((t) => {
-            const sign = t.amount >= 0 ? "+" : "";
-            return `- ${t.description} (${sign}${formatEuros(t.amount)}, ${t.bookedAt})`;
-          })
-          .join("\n")
-      : "(No recent transactions)";
+  const goalsBlock = memories.length
+    ? `\n\nThe user's stated goals/notes (remember these):\n${memories.map((m) => `- ${m}`).join("\n")}`
+    : "";
 
   const prompt = `You are a financial coach helping a user manage their budget buckets.
 
-Current bucket state:
-${bucketSummary}
-
-Recent transactions:
-${txnSummary}
+Current month, ${summary.daysLeftInMonth} days left:
+${bucketLines}${goalsBlock}
 
 Your role is to:
-- Answer the user's questions conversationally about their budget
-- Identify potential issues (e.g., buckets running low, overspending patterns)
-- If you see a concrete rebalance that would clearly help (e.g., moving money from a bucket with excess to one that's short), include a suggestion in your response
+- Answer conversationally about their budget, grounded in the figures above.
+- Flag issues (a bucket over its allocation, low remaining) and pacing given days left.
+- If a concrete rebalance clearly helps (excess bucket -> short bucket, sufficient funds), include a suggestion.
+- If the user states a durable goal or preference (e.g. "saving for a car", "eat out less"), capture it in the "memory" field as a short first-person note so you can remember it next time. Only set memory when they express a real goal/preference, not for every message.
 
 When suggesting a rebalance:
-- Only suggest if the benefit is clear and the user has sufficient funds in the source bucket
-- The amount should be in cents (integer)
-- Use the exact bucket IDs provided
+- Only if the benefit is clear and the source bucket has sufficient funds.
+- amount is integer cents. Use the exact bucket IDs provided.
 
-Reply in a friendly, conversational tone. Keep responses concise (2-3 sentences for simple questions).`;
+Reply in a friendly, concise tone (2-3 sentences for simple questions).`;
 
   return { prompt, bucketIds };
 }
