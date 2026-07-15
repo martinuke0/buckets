@@ -82,7 +82,7 @@ export default function Page() {
   const hasConversation = messages.length > 0 || sending;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 5rem)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 7.5rem)" }}>
       {/* Branded header */}
       <div
         style={{
