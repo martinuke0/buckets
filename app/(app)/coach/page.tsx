@@ -82,23 +82,9 @@ export default function Page() {
   const hasConversation = messages.length > 0 || sending;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 7.5rem)" }}>
-      {/* Branded header */}
-      <div
-        style={{
-          padding: "0.9rem 1rem",
-          background: "var(--grad-brand)",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          fontWeight: 700,
-          fontSize: "0.95rem",
-        }}
-      >
-        <Sparkle size={16} />
-        <span>MyBuckets Coach</span>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 9.5rem)" }}>
+      {/* Thin gradient accent — section signal without duplicating AppShell branding */}
+      <div style={{ height: 2, background: "var(--grad-brand)", flexShrink: 0 }} />
 
       {/* Scroll area */}
       <div
@@ -110,68 +96,90 @@ export default function Page() {
           background: "var(--color-base)",
         }}
       >
-        {!hasConversation && (
-          <div style={{ maxWidth: 520, margin: "1rem auto" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
-              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--grad-brand)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                <Sparkle size={22} />
+        {/* Hero welcome — lives inside the scroll area and scrolls with the chat */}
+        <div style={{ maxWidth: 520, margin: "0 auto 1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.25rem 0.25rem 0.75rem" }}>
+            <div
+              style={{
+                width: 28, height: 28, borderRadius: "50%",
+                background: "var(--grad-brand)",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                color: "#fff",
+                flexShrink: 0,
+              }}
+            >
+              <Sparkle size={14} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  fontSize: "0.95rem",
+                  fontWeight: 700,
+                  background: "var(--grad-brand)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Your Coach
               </div>
-              <div style={{ color: "var(--color-text)", fontSize: "1rem", fontWeight: 600, textAlign: "center" }}>
-                Hi — I&apos;m your Coach.
-              </div>
-              <div style={{ color: "var(--color-muted)", fontSize: "0.875rem", textAlign: "center", lineHeight: 1.5 }}>
-                Ask me about spending, savings, or what to do this month.
+              <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+                Grounded in this month&apos;s budget
               </div>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.25rem" }}>
-              {SAMPLE_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => void handleSend(prompt)}
-                  disabled={sending}
-                  style={{
-                    padding: "0.65rem 0.9rem",
-                    borderRadius: "12px",
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    color: "var(--color-text)",
-                    fontSize: "0.875rem",
-                    textAlign: "left",
-                    cursor: sending ? "not-allowed" : "pointer",
-                    opacity: sending ? 0.6 : 1,
-                  }}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            {!memoriesLoading && memories.length > 0 && (
-              <div style={{ padding: "0.85rem", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "12px" }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
-                  You told me
-                </div>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                  {memories.map((m) => (
-                    <li key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--color-text)" }}>
-                      <span style={{ flex: 1 }}>{m.text}</span>
-                      <button
-                        type="button"
-                        onClick={() => user && deleteCoachMemory(user.uid, m.id)}
-                        aria-label={`Forget goal: ${m.text}`}
-                        style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: "0.75rem", cursor: "pointer", padding: "0.15rem 0.4rem" }}
-                      >
-                        Forget
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
-        )}
+
+          {!hasConversation && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1rem" }}>
+                {SAMPLE_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void handleSend(prompt)}
+                    disabled={sending}
+                    style={{
+                      padding: "0.65rem 0.9rem",
+                      borderRadius: "12px",
+                      background: "var(--color-card)",
+                      border: "1px solid var(--color-border)",
+                      color: "var(--color-text)",
+                      fontSize: "0.875rem",
+                      textAlign: "left",
+                      cursor: sending ? "not-allowed" : "pointer",
+                      opacity: sending ? 0.6 : 1,
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+
+              {!memoriesLoading && memories.length > 0 && (
+                <div style={{ padding: "0.85rem", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "12px" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+                    You told me
+                  </div>
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                    {memories.map((m) => (
+                      <li key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--color-text)" }}>
+                        <span style={{ flex: 1 }}>{m.text}</span>
+                        <button
+                          type="button"
+                          onClick={() => user && deleteCoachMemory(user.uid, m.id)}
+                          aria-label={`Forget goal: ${m.text}`}
+                          style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: "0.75rem", cursor: "pointer", padding: "0.15rem 0.4rem" }}
+                        >
+                          Forget
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         {justApplied && (
           <div style={{ display: "flex", justifyContent: "center" }}>
