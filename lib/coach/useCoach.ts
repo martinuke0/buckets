@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { httpsCallable } from "firebase/functions";
 import { getFunctions } from "firebase/functions";
 import { getFirebaseApp, getDb } from "@/lib/firebase/client";
@@ -52,6 +52,7 @@ function getCoachFunctions() {
 export function useCoach() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<CoachMessage[]>([]);
+  const messagesRef = useRef<CoachMessage[]>([]);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,7 @@ export function useCoach() {
         };
       });
       setMessages(msgs);
+      messagesRef.current = msgs;
     });
   }, [user]);
 
@@ -95,7 +97,7 @@ export function useCoach() {
       } as CoachMessageDoc);
 
       // Build history for context (last 5 messages)
-      const history = messages.slice(-5).map((m) => ({ role: m.role, text: m.text }));
+      const history = messagesRef.current.slice(-5).map((m) => ({ role: m.role, text: m.text }));
 
       // Call coachReply
       const functions = getCoachFunctions();
@@ -117,7 +119,7 @@ export function useCoach() {
       console.error("Coach reply error:", err);
       setError("Failed to get coach response. Please try again.");
     }
-  }, [user, messages]);
+  }, [user]);
 
   const apply = useCallback(async (suggestion: CoachSuggestion, suggestionId: string) => {
     try {
