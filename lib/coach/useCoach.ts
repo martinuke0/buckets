@@ -7,6 +7,7 @@ import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "fireb
 import { coachMessagesCol } from "@/lib/model/paths";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { CoachSuggestion, CoachReply } from "./suggestion";
+import { logAction } from "@/lib/observability/breadcrumbs";
 
 interface CoachMessage {
   role: "user" | "coach";
@@ -91,6 +92,7 @@ export function useCoach() {
 
     try {
       setError(null);
+      logAction("coach_send");
 
       // Write user message to Firestore
       await addDoc(collection(getDb(), coachMessagesCol(user.uid)), {
@@ -128,6 +130,7 @@ export function useCoach() {
     try {
       setApplying(true);
       setError(null);
+      logAction("apply_suggestion");
 
       const functions = getCoachFunctions();
       const applyFn = httpsCallable<ApplyCoachSuggestionRequest, { ok: boolean }>(

@@ -8,6 +8,7 @@ import type { Cents } from "@/lib/model/money";
 import { splitIncome, type SplitRule } from "@/lib/split/engine";
 import { deleteBucket } from "@/lib/buckets/edit";
 import { balanceShares } from "@/lib/data/anchor";
+import { logAction } from "@/lib/observability/breadcrumbs";
 
 export function deriveRules(buckets: Bucket[]): SplitRule[] {
   return buckets.map((b) => ({ bucketId: b.id, percent: b.percent }));
@@ -19,6 +20,7 @@ export async function listBuckets(uid: string): Promise<Bucket[]> {
 }
 
 export async function saveBuckets(uid: string, buckets: Bucket[]): Promise<void> {
+  logAction("save_buckets");
   const db = getDb();
   const batch = writeBatch(db);
   for (const b of buckets) {

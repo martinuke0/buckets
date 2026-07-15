@@ -7,6 +7,7 @@ import { toCents } from "@/lib/model/money";
 import { SplitList } from "@/components/buckets/SplitList";
 import type { Bucket } from "@/lib/model/types";
 import Link from "next/link";
+import { logAction } from "@/lib/observability/breadcrumbs";
 
 export function SimulateIncomeDialog({
   buckets,
@@ -86,6 +87,7 @@ export function SimulateIncomeDialog({
     if (!user || cents <= 0) return;
     setLoading(true);
     try {
+      logAction("simulate_income", { amount: cents });
       await applyIncome(user.uid, cents);
       onClose();
     } catch (err) {

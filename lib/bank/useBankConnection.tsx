@@ -4,6 +4,7 @@ import { usePlaidLink } from "react-plaid-link";
 import { httpsCallable } from "firebase/functions";
 import { getBankFunctions } from "./functionsClient";
 import { friendlyBankError, useBankSync } from "./useBankSync";
+import { logAction } from "@/lib/observability/breadcrumbs";
 
 interface CreateLinkTokenResponse {
   linkToken: string;
@@ -81,6 +82,7 @@ export function useBankConnection(): {
 
   const connect = useCallback(async () => {
     try {
+      logAction("connect_bank");
       setBusy(true);
       setError(null);
       const createLinkTokenFn = httpsCallable<void, CreateLinkTokenResponse>(functions, "createLinkToken");

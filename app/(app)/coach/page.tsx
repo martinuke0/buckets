@@ -10,6 +10,7 @@ import { useCoach } from "@/lib/coach/useCoach";
 import { useCoachMemories, deleteCoachMemory } from "@/lib/data/coachMemories";
 import { MessageBubble } from "@/components/coach/MessageBubble";
 import { SuggestionCard } from "@/components/coach/SuggestionCard";
+import { ReportProblem } from "@/components/observability/ReportProblem";
 
 export default function Page() {
   const { user } = useAuth();
@@ -149,8 +150,9 @@ export default function Page() {
       )}
 
       {error && (
-        <div style={{ color: "var(--color-danger)", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
-          {error}
+        <div style={{ color: "var(--color-danger)", fontSize: "0.875rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span>{error}</span>
+          <ReportProblem summary="Coach send failed" error={error} />
         </div>
       )}
 

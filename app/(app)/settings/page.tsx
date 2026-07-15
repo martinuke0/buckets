@@ -3,6 +3,7 @@ import { useBankConnection } from "@/lib/bank/useBankConnection";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getAuthClient } from "@/lib/firebase/client";
 import { Card, SectionLabel, TrustBadge } from "@/components/ui/primitives";
+import { ReportProblem } from "@/components/observability/ReportProblem";
 
 export default function Page() {
   const { connect, launcher, busy, error } = useBankConnection();
@@ -31,8 +32,9 @@ export default function Page() {
             </button>
             {launcher}
             {error && (
-              <div style={{ color: "var(--color-danger)", marginTop: "0.75rem", fontSize: "0.875rem" }}>
-                {error}
+              <div style={{ color: "var(--color-danger)", marginTop: "0.75rem", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span>{error}</span>
+                <ReportProblem summary="Bank connection failed" error={error} />
               </div>
             )}
           </Card>

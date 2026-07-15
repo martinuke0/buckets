@@ -16,6 +16,7 @@ import { PendingIncomePrompt } from "./PendingIncomePrompt";
 import { SectionLabel } from "@/components/ui/primitives";
 import { anchorBucketsToBalance } from "@/lib/data/buckets";
 import { formatEuros } from "@/lib/model/money";
+import { ReportProblem } from "@/components/observability/ReportProblem";
 
 // Coarse "x ago" for the bank status line. Display-only; minute granularity is fine.
 function timeAgo(iso: string): string {
@@ -171,8 +172,9 @@ export default function Page() {
           )}
         </div>
         {error && (
-          <div style={{ color: "var(--color-danger)", marginBottom: "0.5rem", fontSize: "0.875rem" }}>
-            {error}
+          <div style={{ color: "var(--color-danger)", marginBottom: "0.5rem", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>{error}</span>
+            <ReportProblem summary="Sync failed" error={error} />
           </div>
         )}
         {lastResult && (

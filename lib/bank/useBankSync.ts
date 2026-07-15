@@ -2,6 +2,7 @@
 import { useState, useCallback } from "react";
 import { httpsCallable } from "firebase/functions";
 import { getBankFunctions } from "./functionsClient";
+import { logAction } from "@/lib/observability/breadcrumbs";
 
 interface SyncTransactionsResponse {
   added: number;
@@ -38,6 +39,7 @@ export function useBankSync(): {
       const syncFn = httpsCallable<void, SyncTransactionsResponse>(functions, "syncTransactions");
       const result = await syncFn();
       const added = result.data.added;
+      logAction("sync", { added });
       setLastResult(added === 0 ? "Up to date" : `${added} new`);
       return { added };
     } catch (err) {
