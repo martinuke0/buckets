@@ -1,8 +1,11 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { getFunctions } from "firebase/functions";
-import { getFirebaseApp } from "@/lib/firebase/client";
+import { getFirebaseApp, getDb } from "@/lib/firebase/client";
+import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { coachMessagesCol } from "@/lib/model/paths";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import type { CoachSuggestion, CoachReply } from "./suggestion";
 
 interface CoachMessage {
@@ -22,6 +25,14 @@ interface ApplyCoachSuggestionRequest {
   suggestionId: string;
 }
 
+interface CoachMessageDoc {
+  role: "user" | "coach";
+  text: string;
+  suggestion?: CoachSuggestion;
+  suggestionId?: string;
+  createdAt: Timestamp;
+}
+
 let emulatorConnected = false;
 
 function getCoachFunctions() {
@@ -39,17 +50,49 @@ function getCoachFunctions() {
 }
 
 export function useCoach() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<CoachMessage[]>([]);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Stream messages from Firestore
+  useEffect(() => {
+    if (!user) {
+      setMessages([]);
+      return;
+    }
+
+    const q = query(
+      collection(getDb(), coachMessagesCol(user.uid)),
+      orderBy("createdAt", "asc")
+    );
+
+    return onSnapshot(q, (snap) => {
+      const msgs = snap.docs.map((d) => {
+        const data = d.data() as CoachMessageDoc;
+        return {
+          role: data.role,
+          text: data.text,
+          suggestion: data.suggestion,
+          suggestionId: data.suggestionId,
+        };
+      });
+      setMessages(msgs);
+    });
+  }, [user]);
+
   const send = useCallback(async (text: string) => {
+    if (!user) return;
+
     try {
       setError(null);
 
-      // Add user message
-      const userMessage: CoachMessage = { role: "user", text };
-      setMessages((prev) => [...prev, userMessage]);
+      // Write user message to Firestore
+      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), {
+        role: "user",
+        text,
+        createdAt: Timestamp.now(),
+      } as CoachMessageDoc);
 
       // Build history for context (last 5 messages)
       const history = messages.slice(-5).map((m) => ({ role: m.role, text: m.text }));
@@ -59,19 +102,22 @@ export function useCoach() {
       const coachReplyFn = httpsCallable<CoachReplyRequest, CoachReply>(functions, "coachReply");
       const result = await coachReplyFn({ message: text, history });
 
-      // Add coach reply
-      const coachMessage: CoachMessage = {
+      // Generate suggestionId once if suggestion is present
+      const suggestionId = result.data.suggestion ? crypto.randomUUID() : undefined;
+
+      // Write coach message to Firestore
+      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), {
         role: "coach",
         text: result.data.reply,
         suggestion: result.data.suggestion,
-        suggestionId: result.data.suggestion ? crypto.randomUUID() : undefined,
-      };
-      setMessages((prev) => [...prev, coachMessage]);
+        suggestionId,
+        createdAt: Timestamp.now(),
+      } as CoachMessageDoc);
     } catch (err) {
       console.error("Coach reply error:", err);
       setError("Failed to get coach response. Please try again.");
     }
-  }, [messages]);
+  }, [user, messages]);
 
   const apply = useCallback(async (suggestion: CoachSuggestion, suggestionId: string) => {
     try {
