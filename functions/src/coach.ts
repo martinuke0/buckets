@@ -47,6 +47,7 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
 
       // Current-month transactions (existing broadened) + anchor timestamp for isPreAnchor.
       const now = new Date();
+      const today = now.toISOString().slice(0, 10); // YYYY-MM-DD, grounds the coach in real time
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
         .toISOString()
         .slice(0, 10);
@@ -77,7 +78,7 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
         rawTxns,
         now,
       );
-      const { prompt, bucketIds } = buildCoachContext(summary, memories, contextTxns);
+      const { prompt, bucketIds } = buildCoachContext(summary, memories, contextTxns, today);
 
       // Include the last few conversation turns so the coach has short-term memory
       // across the same session. The client caps history at ~5 (useCoach.ts).

@@ -15,6 +15,7 @@ export function buildCoachContext(
   summary: SpendSummary,
   memories: string[],
   contextTxns: CoachTxn[] = [],
+  today?: string, // ISO date YYYY-MM-DD — grounds the coach in real time so it doesn't hallucinate "yesterday"
 ): { prompt: string; bucketIds: string[] } {
   const bucketIds = summary.buckets.map((b) => b.id);
   const nameById = new Map(summary.buckets.map((b) => [b.id, b.name]));
@@ -45,9 +46,11 @@ export function buildCoachContext(
         .join("\n")}\n\nPre-anchor entries are historical — informational for spending patterns and advice, but they do NOT draw current buckets. Rebalance suggestions must be based on the bucket state above.`
     : "";
 
+  const dateHeader = today ? `Today is ${today}. ` : "";
+
   const prompt = `You are a financial coach helping a user manage their budget buckets.
 
-Current month, ${summary.daysLeftInMonth} days left:
+${dateHeader}Current month, ${summary.daysLeftInMonth} days left:
 ${bucketLines}${goalsBlock}${txnsBlock}
 
 Your role:

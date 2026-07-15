@@ -54,3 +54,14 @@ describe("buildCoachContext transactions section", () => {
     expect(prompt).toMatch(/---META---/);
   });
 });
+
+describe("buildCoachContext today grounding", () => {
+  it("includes a Today is <date>. header when today is supplied", () => {
+    const { prompt } = buildCoachContext(summary, [], [], "2026-07-16");
+    expect(prompt).toMatch(/Today is 2026-07-16\./);
+  });
+  it("omits the today header when today is not supplied (backward compat)", () => {
+    const { prompt } = buildCoachContext(summary, [], []);
+    expect(prompt).not.toMatch(/Today is /);
+  });
+});
