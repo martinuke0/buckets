@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyBuckets",
+  title: "Buckets",
   description: "Auto-split your income into smart buckets and always know what's safe to spend.",
 };
 

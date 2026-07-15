@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Logo } from "@/components/ui/primitives";
+import { Logo, Wordmark } from "@/components/ui/primitives";
 
 interface AppShellProps {
   children: ReactNode;
@@ -16,14 +16,9 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Logo size={32} />
-          <h1
-            className="text-xl font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            MyBuckets
-          </h1>
+          <Wordmark size={20} />
         </div>
         {rightSlot && <div>{rightSlot}</div>}
       </header>

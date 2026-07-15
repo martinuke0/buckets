@@ -42,7 +42,7 @@ export default function SignIn() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
-        <h1 className="text-2xl font-bold mb-1">MyBuckets</h1>
+        <h1 className="text-2xl font-bold mb-1">Buckets</h1>
         <p className="text-sm mb-6" style={{ color: "var(--color-muted)" }}>
           Auto-split your income. Always know what&apos;s safe to spend.
         </p>
