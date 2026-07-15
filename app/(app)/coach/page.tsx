@@ -9,6 +9,7 @@ import { useCoach } from "@/lib/coach/useCoach";
 import { useCoachMemories, deleteCoachMemory } from "@/lib/data/coachMemories";
 import { MessageBubble } from "@/components/coach/MessageBubble";
 import { SuggestionCard } from "@/components/coach/SuggestionCard";
+import { CoachToast } from "@/components/coach/CoachToast";
 import { Sparkle } from "@/components/coach/Sparkle";
 import { ReportProblem } from "@/components/observability/ReportProblem";
 
@@ -22,7 +23,7 @@ export default function Page() {
   const { user } = useAuth();
   const { premium, loading: premiumLoading } = usePremium();
   const { buckets, loading: bucketsLoading } = useBuckets();
-  const { messages, send, apply, applying, error } = useCoach();
+  const { messages, send, apply, applying, error, streamingText, justApplied, dismissJustApplied } = useCoach();
   const { memories, loading: memoriesLoading } = useCoachMemories();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -30,12 +31,12 @@ export default function Page() {
   const [lastAttempt, setLastAttempt] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new message or while thinking
+  // Auto-scroll to bottom on new message or while streaming
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages.length, sending]);
+  }, [messages.length, sending, streamingText]);
 
   async function handleSend(text: string) {
     const trimmed = text.trim();
@@ -57,7 +58,8 @@ export default function Page() {
   async function handleApply(suggestion: NonNullable<typeof messages[number]["suggestion"]>, suggestionId: string, coachMsgId: string) {
     try {
       await apply(suggestion, suggestionId, coachMsgId);
-      setDismissed((prev) => new Set(prev).add(suggestionId));
+      // No local dismissal — the persistent Applied strip renders in place of the controls
+      // once the appliedAt marker lands on the message doc (best-effort, onSnapshot-driven).
     } catch {
       /* useCoach exposes error */
     }
@@ -171,14 +173,26 @@ export default function Page() {
           </div>
         )}
 
+        {justApplied && (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <CoachToast
+              from={buckets.find((b) => b.id === justApplied.from)?.name ?? justApplied.from}
+              to={buckets.find((b) => b.id === justApplied.to)?.name ?? justApplied.to}
+              amount={justApplied.amount}
+              onDismiss={dismissJustApplied}
+            />
+          </div>
+        )}
+
         {messages.map((msg, idx) => (
           <div key={idx}>
             <MessageBubble role={msg.role} text={msg.text} />
-            {msg.suggestion && msg.suggestionId && !dismissed.has(msg.suggestionId) && (
+            {msg.suggestion && msg.suggestionId && (msg.appliedAt || !dismissed.has(msg.suggestionId)) && (
               <div style={{ marginLeft: "34px", marginBottom: "0.75rem" }}>
                 <SuggestionCard
                   suggestion={msg.suggestion}
                   buckets={buckets}
+                  appliedAt={msg.appliedAt}
                   onApply={() => handleApply(msg.suggestion!, msg.suggestionId!, msg.id)}
                   onDismiss={() => setDismissed((prev) => new Set(prev).add(msg.suggestionId!))}
                 />
@@ -187,7 +201,9 @@ export default function Page() {
           </div>
         ))}
 
-        {sending && <ThinkingBubble />}
+        {streamingText !== null && (
+          streamingText === "" ? <ThinkingBubble /> : <MessageBubble role="coach" text={streamingText} />
+        )}
       </div>
 
       {/* Error strip */}
