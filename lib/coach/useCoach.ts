@@ -109,17 +109,20 @@ export function useCoach() {
       const coachReplyFn = httpsCallable<CoachReplyRequest, CoachReply>(functions, "coachReply");
       const result = await coachReplyFn({ message: text, history });
 
-      // Generate suggestionId once if suggestion is present
-      const suggestionId = result.data.suggestion ? crypto.randomUUID() : undefined;
-
-      // Write coach message to Firestore
-      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), {
+      // Firestore rejects `undefined` field values. Build the doc conditionally so
+      // suggestion/suggestionId are omitted (not written as undefined) when the
+      // model didn't propose a rebalance — the common case for a plain question.
+      const suggestion = result.data.suggestion;
+      const coachDoc: Record<string, unknown> = {
         role: "coach",
         text: result.data.reply,
-        suggestion: result.data.suggestion,
-        suggestionId,
         createdAt: Timestamp.now(),
-      } as CoachMessageDoc);
+      };
+      if (suggestion) {
+        coachDoc.suggestion = suggestion;
+        coachDoc.suggestionId = crypto.randomUUID();
+      }
+      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), coachDoc);
     } catch (err) {
       console.error("Coach reply error:", err);
       setError("Failed to get coach response. Please try again.");
