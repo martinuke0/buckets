@@ -18,3 +18,12 @@ html, body { background: var(--color-base); color: var(--color-text); color-sche
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
+
+@keyframes coach-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.coach-spin {
+  animation: coach-spin 0.9s linear infinite;
+  transform-origin: center;
+}

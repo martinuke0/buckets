@@ -106,22 +106,23 @@ export default function Page() {
         ))}
       </div>
 
-      <button
-        onClick={() => setShowDialog(true)}
-        className="w-full rounded-lg py-3 px-4 font-semibold"
-        style={{ background: "var(--grad-brand)", color: "var(--color-text)" }}
-      >
-        Simulate income
-      </button>
-
       {process.env.NODE_ENV === "development" && (
-        <button
-          onClick={() => setShowPayment(true)}
-          className="w-full rounded-lg py-3 px-4 font-semibold mt-2"
-          style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
-        >
-          Simulate payment (dev)
-        </button>
+        <>
+          <button
+            onClick={() => setShowDialog(true)}
+            className="w-full rounded-lg py-3 px-4 font-semibold"
+            style={{ background: "var(--grad-brand)", color: "var(--color-text)" }}
+          >
+            Simulate income (dev)
+          </button>
+          <button
+            onClick={() => setShowPayment(true)}
+            className="w-full rounded-lg py-3 px-4 font-semibold mt-2"
+            style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+          >
+            Simulate payment (dev)
+          </button>
+        </>
       )}
 
       {showDialog && (

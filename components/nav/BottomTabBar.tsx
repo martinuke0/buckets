@@ -13,9 +13,10 @@ const TABS = [
 
 interface BottomTabBarProps {
   onSync?: () => void;
+  syncing?: boolean;
 }
 
-export function BottomTabBar({ onSync }: BottomTabBarProps) {
+export function BottomTabBar({ onSync, syncing = false }: BottomTabBarProps) {
   const pathname = usePathname();
 
   return (
@@ -42,6 +43,7 @@ export function BottomTabBar({ onSync }: BottomTabBarProps) {
         {/* Raised Sync Button */}
         <button
           onClick={onSync}
+          disabled={syncing}
           className="flex flex-col items-center gap-1 px-4 py-2 transition-transform hover:scale-105"
           style={{
             background: "var(--grad-brand)",
@@ -51,12 +53,18 @@ export function BottomTabBar({ onSync }: BottomTabBarProps) {
             height: "56px",
             border: "2px solid rgba(20, 22, 28, 0.82)",
             boxShadow: "0 4px 16px rgba(153, 69, 255, 0.4)",
+            cursor: syncing ? "wait" : "pointer",
+            opacity: syncing ? 0.75 : 1,
           }}
-          aria-label="Sync"
+          aria-label={syncing ? "Syncing…" : "Sync"}
+          aria-busy={syncing}
         >
-          <SyncIcon className="w-5 h-5" color="white" />
+          <SyncIcon
+            className={`w-5 h-5${syncing ? " coach-spin" : ""}`}
+            color="white"
+          />
           <span className="text-[10px] font-medium" style={{ color: "white" }}>
-            Sync
+            {syncing ? "…" : "Sync"}
           </span>
         </button>
 

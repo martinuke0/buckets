@@ -8,14 +8,14 @@ import { useBankSync } from "@/lib/bank/useBankSync";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const { refresh } = useBankSync();
+  const { refresh, busy: syncing } = useBankSync();
   const router = useRouter();
   useEffect(() => { if (!loading && !user) router.replace("/sign-in"); }, [loading, user, router]);
   if (loading || !user) return <div className="p-6" style={{ color: "var(--color-muted)" }}>Loading…</div>;
   return (
     <>
       <AppShell>{children}</AppShell>
-      <BottomTabBar onSync={() => { void refresh(); }} />
+      <BottomTabBar onSync={() => { void refresh(); }} syncing={syncing} />
     </>
   );
 }
