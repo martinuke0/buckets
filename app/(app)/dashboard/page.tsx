@@ -62,7 +62,6 @@ export default function Page() {
       <SafeToSpendHero
         safeToSpend={safeToSpend}
         onTrack={onTrack}
-        monthProgress={monthProgress}
       />
 
       {bankStatus?.currentBalance !== undefined && (
