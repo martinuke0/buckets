@@ -9,14 +9,33 @@ const buckets: Bucket[] = [
 ];
 
 describe("SuggestionCard", () => {
-  it("renders a human-readable rebalance and fires Apply", () => {
+  it("renders small inline Apply pill + Not now link and fires callbacks", () => {
     const onApply = vi.fn();
-    render(<SuggestionCard suggestion={{ type: "rebalance", fromBucketId: "save", toBucketId: "fun", amount: 5000 }}
-      buckets={buckets} onApply={onApply} onDismiss={vi.fn()} />);
-    expect(screen.getByText(/Savings/)).toBeInTheDocument();
-    expect(screen.getByText(/Nights out/)).toBeInTheDocument();
-    expect(screen.getByText(/€50\.00/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /apply/i }));
-    expect(onApply).toHaveBeenCalled();
+    const onDismiss = vi.fn();
+    render(
+      <SuggestionCard
+        suggestion={{ type: "rebalance", fromBucketId: "save", toBucketId: "fun", amount: 5000 }}
+        buckets={buckets}
+        onApply={onApply}
+        onDismiss={onDismiss}
+      />
+    );
+
+    // Assert small inline Apply button exists with readable text
+    const applyButton = screen.getByRole("button", { name: /apply/i });
+    expect(applyButton).toBeInTheDocument();
+    expect(screen.getByText(/Move €50\.00: Savings → Nights out/i)).toBeInTheDocument();
+
+    // Assert Not now dismiss control exists
+    const dismissButton = screen.getByRole("button", { name: /dismiss/i });
+    expect(dismissButton).toBeInTheDocument();
+    expect(screen.getByText(/Not now/i)).toBeInTheDocument();
+
+    // Assert callbacks fire
+    fireEvent.click(applyButton);
+    expect(onApply).toHaveBeenCalledOnce();
+
+    fireEvent.click(dismissButton);
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 });

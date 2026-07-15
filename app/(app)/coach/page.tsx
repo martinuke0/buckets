@@ -7,6 +7,7 @@ import { startCheckout } from "@/lib/billing/startCheckout";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useCoach } from "@/lib/coach/useCoach";
+import { useCoachMemories, deleteCoachMemory } from "@/lib/data/coachMemories";
 import { MessageBubble } from "@/components/coach/MessageBubble";
 import { SuggestionCard } from "@/components/coach/SuggestionCard";
 
@@ -15,6 +16,7 @@ export default function Page() {
   const { premium, loading: premiumLoading } = usePremium();
   const { buckets, loading: bucketsLoading } = useBuckets();
   const { messages, send, apply, applying, error } = useCoach();
+  const { memories, loading: memoriesLoading } = useCoachMemories();
   const [input, setInput] = useState("");
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
 
@@ -80,8 +82,24 @@ export default function Page() {
         }}
       >
         {messages.length === 0 && (
-          <div style={{ textAlign: "center", color: "var(--color-muted)", marginTop: "3rem" }}>
-            Ask me anything about your budget
+          <div>
+            <div style={{ textAlign: "center", color: "var(--color-muted)", marginTop: "3rem", marginBottom: "2rem" }}>
+              Hi! I'm your AI coach. Ask me anything about your budget.
+            </div>
+            {!memoriesLoading && memories.length > 0 && (
+              <div style={{ marginTop: "2rem", padding: "1rem", background: "var(--color-base)", borderRadius: "0.5rem" }}>
+                <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)", marginBottom: "0.75rem" }}>
+                  You told me:
+                </div>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {memories.map((m) => (
+                    <li key={m.id} style={{ fontSize: "0.8125rem", color: "var(--color-muted)" }}>
+                      • {m.text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
         {messages.map((msg, idx) => (
@@ -98,6 +116,37 @@ export default function Page() {
           </div>
         ))}
       </div>
+
+      {!memoriesLoading && memories.length > 0 && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "var(--color-card)", borderRadius: "0.5rem" }}>
+          <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)", marginBottom: "0.5rem" }}>
+            Your goals
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {memories.map((m) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <div style={{ fontSize: "0.8125rem", color: "var(--color-text)", flex: 1 }}>
+                  {m.text}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => user && deleteCoachMemory(user.uid, m.id)}
+                  style={{
+                    background: "none",
+                    color: "var(--color-muted)",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    padding: "0.25rem 0.5rem",
+                  }}
+                  aria-label={`Forget goal: ${m.text}`}
+                >
+                  Forget
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ color: "var(--color-danger)", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
