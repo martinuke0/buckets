@@ -36,10 +36,13 @@ export function useBankSync(): {
       setBusy(true);
       setError(null);
       setLastResult(null);
+      // Crumb BEFORE the callable so a failed sync (the exact case the user is
+      // about to Report) still records this action in the breadcrumb trail.
+      logAction("sync");
       const syncFn = httpsCallable<void, SyncTransactionsResponse>(functions, "syncTransactions");
       const result = await syncFn();
       const added = result.data.added;
-      logAction("sync", { added });
+      logAction("sync_ok", { added });
       setLastResult(added === 0 ? "Up to date" : `${added} new`);
       return { added };
     } catch (err) {

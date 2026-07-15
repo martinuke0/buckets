@@ -29,11 +29,11 @@ export async function reportProblem(
     userAgent,
   };
 
-  if (error !== undefined) {
+  if (error !== undefined && error !== "") {
     doc.error = error;
   }
 
-  if (note !== undefined) {
+  if (note !== undefined && note.trim() !== "") {
     doc.note = note;
   }
 
