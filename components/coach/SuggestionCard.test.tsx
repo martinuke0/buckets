@@ -38,4 +38,24 @@ describe("SuggestionCard", () => {
     fireEvent.click(dismissButton);
     expect(onDismiss).toHaveBeenCalledOnce();
   });
+
+  it("renders an applied strip when appliedAt is set (no Apply/Dismiss buttons)", () => {
+    render(
+      <SuggestionCard
+        suggestion={{ type: "rebalance", fromBucketId: "save", toBucketId: "fun", amount: 4000 }}
+        buckets={buckets}
+        onApply={vi.fn()}
+        onDismiss={vi.fn()}
+        appliedAt={new Date().toISOString()}
+      />
+    );
+
+    expect(screen.getByText(/Applied/i)).toBeInTheDocument();
+    expect(screen.getByText(/Savings/)).toBeInTheDocument();
+    expect(screen.getByText(/Nights out/)).toBeInTheDocument();
+    expect(screen.getByText(/€40\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/just now/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /apply/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
+  });
 });
