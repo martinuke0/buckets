@@ -8,6 +8,7 @@ export type CoachSuggestion = {
 export type CoachReply = {
   reply: string;
   suggestion?: CoachSuggestion;
+  memory?: string;
 };
 
 export function validateSuggestion(
