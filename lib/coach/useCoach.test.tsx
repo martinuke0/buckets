@@ -3,7 +3,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { useCoach } from "@/lib/coach/useCoach";
 
 const addDocFn = vi.fn().mockResolvedValue({ id: "doc-id" });
-const coachReplyFn = vi.fn();
+const streamCallable: {
+  stream: (_input: unknown) => Promise<{ stream: AsyncIterable<string>; data: Promise<{ fullText: string }> }>;
+} = {
+  stream: async (_input: unknown) => ({
+    stream: (async function*() {
+      yield "hel";
+      yield "lo, ";
+      yield "there";
+    })(),
+    data: Promise.resolve({ fullText: "hello, there" }),
+  }),
+};
 
 // Stable references to prevent resubscribe loop
 const mockAuth = { user: { uid: "u1", email: null }, loading: false };
@@ -47,7 +58,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("firebase/functions", () => ({
   getFunctions: () => ({}),
-  httpsCallable: () => coachReplyFn,
+  httpsCallable: () => streamCallable,
   connectFunctionsEmulator: vi.fn(),
 }));
 
@@ -65,10 +76,34 @@ function Probe() {
   return <div data-testid="messages">{messages.map((m) => `${m.role}: ${m.text}`).join(" | ")}</div>;
 }
 
+vi.mock("@/lib/coach/parseReply", () => ({
+  parseCoachReplyStream: (text: string) => {
+    // Simple mock: split by ---META--- delimiter
+    const parts = text.split("\n---META---\n");
+    if (parts.length === 1) {
+      return { reply: text };
+    }
+    try {
+      const meta = JSON.parse(parts[1]);
+      return { reply: parts[0], suggestion: meta.suggestion };
+    } catch {
+      return { reply: text };
+    }
+  },
+}));
+
 describe("useCoach persistence", () => {
   beforeEach(() => {
     addDocFn.mockClear();
-    coachReplyFn.mockClear();
+    // Reset streamCallable to default
+    streamCallable.stream = async (_input: unknown) => ({
+      stream: (async function*() {
+        yield "hel";
+        yield "lo, ";
+        yield "there";
+      })(),
+      data: Promise.resolve({ fullText: "hello, there" }),
+    });
   });
 
   it("exposes streamed messages from snapshot", async () => {
@@ -124,5 +159,145 @@ describe("useCoach persistence", () => {
       suggestionId,
       createdAt: expect.anything(),
     });
+  });
+});
+
+describe("useCoach streaming", () => {
+  beforeEach(() => {
+    addDocFn.mockClear();
+    // Reset streamCallable to default
+    streamCallable.stream = async (_input: unknown) => ({
+      stream: (async function*(): AsyncGenerator<string> {
+        yield "hel";
+        yield "lo, ";
+        yield "there";
+      })(),
+      data: Promise.resolve({ fullText: "hello, there" }),
+    });
+  });
+
+  it("streams chunks into streamingText, then writes one coach doc", async () => {
+    function StreamProbe() {
+      const hook = useCoach();
+      return (
+        <div>
+          <div data-testid="streaming">{hook.streamingText ?? "null"}</div>
+          <button data-testid="send" onClick={() => hook.send("hi")} />
+        </div>
+      );
+    }
+
+    render(<StreamProbe />);
+
+    // Initially null
+    expect(screen.getByTestId("streaming")).toHaveTextContent("null");
+
+    // Trigger send
+    screen.getByTestId("send").click();
+
+    // Should write user doc first
+    await waitFor(() => expect(addDocFn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ role: "user", text: "hi" })
+    ));
+
+    // During streaming, streamingText should accumulate
+    await waitFor(() => {
+      const text = screen.getByTestId("streaming").textContent;
+      return text !== "null" && text !== "";
+    });
+
+    // After stream ends, should write coach doc and streamingText returns to null
+    await waitFor(() => {
+      expect(addDocFn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ role: "coach", text: "hello, there" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("streaming")).toHaveTextContent("null");
+    });
+
+    // Should have written exactly 2 docs: user + coach
+    expect(addDocFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("includes suggestion + suggestionId when footer contains a valid rebalance", async () => {
+    streamCallable.stream = async (_input: unknown) => ({
+      stream: (async function*(): AsyncGenerator<string> {
+        yield "Move some to savings?";
+      })(),
+      data: Promise.resolve({
+        fullText: 'Move some to savings?\n---META---\n{"suggestion":{"type":"rebalance","fromBucketId":"fun","toBucketId":"savings","amount":4000}}',
+      }),
+    });
+
+    function StreamProbe() {
+      const hook = useCoach();
+      return (
+        <div>
+          <button data-testid="send" onClick={() => hook.send("hi")} />
+        </div>
+      );
+    }
+
+    render(<StreamProbe />);
+    screen.getByTestId("send").click();
+
+    // Wait for coach doc with suggestion
+    await waitFor(() => {
+      const calls = addDocFn.mock.calls;
+      const coachCall = calls.find((c) => c[1]?.role === "coach");
+      return coachCall && coachCall[1].suggestion;
+    });
+
+    const coachCall = addDocFn.mock.calls.find((c) => c[1]?.role === "coach");
+    expect(coachCall![1]).toMatchObject({
+      role: "coach",
+      text: "Move some to savings?",
+      suggestion: {
+        type: "rebalance",
+        fromBucketId: "fun",
+        toBucketId: "savings",
+        amount: 4000,
+      },
+    });
+    expect(coachCall![1].suggestionId).toMatch(/^[a-f0-9-]+$/); // UUID format
+  });
+
+  it("excludes suggestion + suggestionId when footer is absent", async () => {
+    streamCallable.stream = async (_input: unknown) => ({
+      stream: (async function*(): AsyncGenerator<string> {
+        yield "Just a plain response";
+      })(),
+      data: Promise.resolve({ fullText: "Just a plain response" }),
+    });
+
+    function StreamProbe() {
+      const hook = useCoach();
+      return (
+        <div>
+          <button data-testid="send" onClick={() => hook.send("hi")} />
+        </div>
+      );
+    }
+
+    render(<StreamProbe />);
+    screen.getByTestId("send").click();
+
+    // Wait for coach doc
+    await waitFor(() => {
+      const calls = addDocFn.mock.calls;
+      return calls.find((c) => c[1]?.role === "coach");
+    });
+
+    const coachCall = addDocFn.mock.calls.find((c) => c[1]?.role === "coach");
+    expect(coachCall![1]).toMatchObject({
+      role: "coach",
+      text: "Just a plain response",
+    });
+    expect(coachCall![1]).not.toHaveProperty("suggestion");
+    expect(coachCall![1]).not.toHaveProperty("suggestionId");
   });
 });

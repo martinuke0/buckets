@@ -1,19 +1,22 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { httpsCallable } from "firebase/functions";
-import { getFunctions } from "firebase/functions";
+import { httpsCallable, getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getFirebaseApp, getDb } from "@/lib/firebase/client";
 import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
 import { coachMessagesCol } from "@/lib/model/paths";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import type { CoachSuggestion, CoachReply } from "./suggestion";
+import type { CoachSuggestion } from "./suggestion";
+import { parseCoachReplyStream } from "@/lib/coach/parseReply";
+import { updateCoachMessageApplied } from "@/lib/data/coachMessages";
 import { logAction } from "@/lib/observability/breadcrumbs";
 
-interface CoachMessage {
+export interface CoachMessage {
+  id: string;
   role: "user" | "coach";
   text: string;
   suggestion?: CoachSuggestion;
   suggestionId?: string;
+  appliedAt?: string; // ISO — from Timestamp.toDate().toISOString() on read
 }
 
 interface CoachReplyRequest {
@@ -21,21 +24,6 @@ interface CoachReplyRequest {
   history?: Array<{ role: "user" | "coach"; text: string }>;
 }
 
-interface ApplyCoachSuggestionRequest {
-  suggestion: CoachSuggestion;
-  suggestionId: string;
-}
-
-interface CoachMessageDoc {
-  role: "user" | "coach";
-  text: string;
-  suggestion?: CoachSuggestion;
-  suggestionId?: string;
-  // Client-only writer/reader: Firestore Timestamp is intentional (ordered by
-  // orderBy("createdAt")). Do NOT append coachMessages server-side with an ISO
-  // string — mixed Timestamp/string types sort in separate groups and break order.
-  createdAt: Timestamp;
-}
 
 let emulatorConnected = false;
 
@@ -43,11 +31,10 @@ function getCoachFunctions() {
   const functions = getFunctions(getFirebaseApp());
   if (process.env.NODE_ENV === "development" && !emulatorConnected) {
     try {
-      const { connectFunctionsEmulator } = require("firebase/functions");
       connectFunctionsEmulator(functions, "127.0.0.1", 5001);
       emulatorConnected = true;
     } catch {
-      // Already connected
+      /* already connected */
     }
   }
   return functions;
@@ -59,27 +46,28 @@ export function useCoach() {
   const messagesRef = useRef<CoachMessage[]>([]);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [justApplied, setJustApplied] = useState<{ suggestionId: string; from: string; to: string; amount: number } | null>(null);
 
-  // Stream messages from Firestore
+  // Stream persisted messages from Firestore.
   useEffect(() => {
     if (!user) {
       setMessages([]);
+      messagesRef.current = [];
       return;
     }
-
-    const q = query(
-      collection(getDb(), coachMessagesCol(user.uid)),
-      orderBy("createdAt", "asc")
-    );
-
+    const q = query(collection(getDb(), coachMessagesCol(user.uid)), orderBy("createdAt", "asc"));
     return onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map((d) => {
-        const data = d.data() as CoachMessageDoc;
+      const msgs: CoachMessage[] = snap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        const appliedAtRaw = data.appliedAt as { toDate?: () => Date } | undefined;
         return {
-          role: data.role,
-          text: data.text,
-          suggestion: data.suggestion,
-          suggestionId: data.suggestionId,
+          id: d.id,
+          role: data.role as CoachMessage["role"],
+          text: data.text as string,
+          suggestion: data.suggestion as CoachSuggestion | undefined,
+          suggestionId: data.suggestionId as string | undefined,
+          appliedAt: appliedAtRaw?.toDate ? appliedAtRaw.toDate().toISOString() : undefined,
         };
       });
       setMessages(msgs);
@@ -89,58 +77,73 @@ export function useCoach() {
 
   const send = useCallback(async (text: string) => {
     if (!user) return;
-
     try {
       setError(null);
+      setStreamingText(""); // placeholder bubble becomes visible immediately
       logAction("coach_send");
 
-      // Write user message to Firestore
       await addDoc(collection(getDb(), coachMessagesCol(user.uid)), {
         role: "user",
         text,
         createdAt: Timestamp.now(),
-      } as CoachMessageDoc);
+      });
 
-      // Build history for context (last 5 messages)
       const history = messagesRef.current.slice(-5).map((m) => ({ role: m.role, text: m.text }));
 
-      // Call coachReply
-      const functions = getCoachFunctions();
-      const coachReplyFn = httpsCallable<CoachReplyRequest, CoachReply>(functions, "coachReply");
-      const result = await coachReplyFn({ message: text, history });
+      const fn = getCoachFunctions();
+      const callable = httpsCallable<CoachReplyRequest, { fullText: string }, string>(fn, "coachReply");
+      const { stream, data } = await callable.stream({ message: text, history });
 
-      // Firestore rejects `undefined` field values. Build the doc conditionally so
-      // suggestion/suggestionId are omitted (not written as undefined) when the
-      // model didn't propose a rebalance — the common case for a plain question.
-      const suggestion = result.data.suggestion;
-      const coachDoc: Record<string, unknown> = {
+      let accum = "";
+      for await (const chunk of stream) {
+        accum += chunk;
+        setStreamingText(accum);
+      }
+      const result = await data;
+      const finalText = result?.fullText ?? accum;
+
+      const parsed = parseCoachReplyStream(finalText);
+
+      // Firestore rejects `undefined`. Only include suggestion + suggestionId when present.
+      const doc: Record<string, unknown> = {
         role: "coach",
-        text: result.data.reply,
+        text: parsed.reply,
         createdAt: Timestamp.now(),
       };
-      if (suggestion) {
-        coachDoc.suggestion = suggestion;
-        coachDoc.suggestionId = crypto.randomUUID();
+      if (parsed.suggestion && typeof parsed.suggestion === "object") {
+        doc.suggestion = parsed.suggestion;
+        doc.suggestionId = crypto.randomUUID();
       }
-      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), coachDoc);
+      await addDoc(collection(getDb(), coachMessagesCol(user.uid)), doc);
     } catch (err) {
       console.error("Coach reply error:", err);
       setError("Failed to get coach response. Please try again.");
+    } finally {
+      setStreamingText(null); // placeholder disappears; the persisted message renders via onSnapshot
     }
   }, [user]);
 
-  const apply = useCallback(async (suggestion: CoachSuggestion, suggestionId: string) => {
+  const apply = useCallback(async (suggestion: CoachSuggestion, suggestionId: string, coachMsgId: string) => {
+    if (!user) return;
     try {
       setApplying(true);
       setError(null);
       logAction("apply_suggestion");
 
-      const functions = getCoachFunctions();
-      const applyFn = httpsCallable<ApplyCoachSuggestionRequest, { ok: boolean }>(
-        functions,
-        "applyCoachSuggestion"
-      );
+      const fn = getCoachFunctions();
+      const applyFn = httpsCallable<{ suggestion: CoachSuggestion; suggestionId: string }, { ok: boolean }>(fn, "applyCoachSuggestion");
       await applyFn({ suggestion, suggestionId });
+
+      // Best-effort UX marker; do NOT throw on failure — money already moved.
+      try { await updateCoachMessageApplied(user.uid, coachMsgId); }
+      catch (err) { console.warn("updateCoachMessageApplied skipped:", err instanceof Error ? err.message : err); }
+
+      setJustApplied({
+        suggestionId,
+        from: suggestion.fromBucketId,
+        to: suggestion.toBucketId,
+        amount: suggestion.amount,
+      });
     } catch (err) {
       console.error("Apply suggestion error:", err);
       setError("Failed to apply suggestion. Please try again.");
@@ -148,13 +151,9 @@ export function useCoach() {
     } finally {
       setApplying(false);
     }
-  }, []);
+  }, [user]);
 
-  return {
-    messages,
-    send,
-    apply,
-    applying,
-    error,
-  };
+  const dismissJustApplied = useCallback(() => setJustApplied(null), []);
+
+  return { messages, send, apply, applying, error, streamingText, justApplied, dismissJustApplied };
 }

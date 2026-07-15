@@ -54,9 +54,9 @@ export default function Page() {
     if (lastAttempt) void handleSend(lastAttempt);
   }
 
-  async function handleApply(suggestion: NonNullable<typeof messages[number]["suggestion"]>, suggestionId: string) {
+  async function handleApply(suggestion: NonNullable<typeof messages[number]["suggestion"]>, suggestionId: string, coachMsgId: string) {
     try {
-      await apply(suggestion, suggestionId);
+      await apply(suggestion, suggestionId, coachMsgId);
       setDismissed((prev) => new Set(prev).add(suggestionId));
     } catch {
       /* useCoach exposes error */
@@ -179,7 +179,7 @@ export default function Page() {
                 <SuggestionCard
                   suggestion={msg.suggestion}
                   buckets={buckets}
-                  onApply={() => handleApply(msg.suggestion!, msg.suggestionId!)}
+                  onApply={() => handleApply(msg.suggestion!, msg.suggestionId!, msg.id)}
                   onDismiss={() => setDismissed((prev) => new Set(prev).add(msg.suggestionId!))}
                 />
               </div>
