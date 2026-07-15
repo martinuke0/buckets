@@ -402,7 +402,9 @@ export async function listCoachMemories(uid: string): Promise<string[]> {
 }
 
 export async function writeCoachMemory(uid: string, text: string): Promise<void> {
-  const trimmed = text.trim();
+  // Cap length: memories are one-line notes re-injected into every future coach
+  // prompt, so an unbounded model string would bloat token cost. 280 is ample.
+  const trimmed = text.trim().slice(0, 280);
   if (!trimmed) return;
   const db = getFirestore();
   const col = db.collection(`users/${uid}/coachMemories`);
