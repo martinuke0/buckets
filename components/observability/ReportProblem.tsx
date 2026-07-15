@@ -14,30 +14,27 @@ export function ReportProblem({ summary, error }: ReportProblemProps) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!user) return;
 
+    setSubmitting(true);
+    setSubmitError(null);
     try {
-      setSubmitting(true);
-      await reportProblem(user.uid, {
-        summary,
-        error,
-        note,
-      });
-
-      // Show confirmation
+      await reportProblem(user.uid, { summary, error, note });
       setShowConfirmation(true);
-
-      // Close dialog after 2 seconds
       setTimeout(() => {
         setIsOpen(false);
         setShowConfirmation(false);
         setNote("");
       }, 2000);
     } catch (err) {
+      // Surface it, don't silently swallow — the user just clicked a button.
       console.error("Failed to report problem:", err);
-      setSubmitting(false);
+      setSubmitError("Couldn't submit right now. Try again in a moment.");
+    } finally {
+      setSubmitting(false); // always reset so the button doesn't stick
     }
   };
 
@@ -45,6 +42,7 @@ export function ReportProblem({ summary, error }: ReportProblemProps) {
     setIsOpen(false);
     setNote("");
     setShowConfirmation(false);
+    setSubmitError(null);
   };
 
   if (!user) return null;
@@ -128,6 +126,18 @@ export function ReportProblem({ summary, error }: ReportProblemProps) {
                     />
                   </label>
                 </div>
+
+                {submitError && (
+                  <div
+                    style={{
+                      color: "var(--color-danger)",
+                      fontSize: "0.8125rem",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    {submitError}
+                  </div>
+                )}
 
                 <div className="flex gap-2">
                   <button
