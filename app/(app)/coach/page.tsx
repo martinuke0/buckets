@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import { SectionLabel } from "@/components/ui/primitives";
+import { useState, useEffect, useRef } from "react";
 import { usePremium } from "@/lib/billing/usePremium";
 import { UpgradeCard } from "@/components/billing/UpgradeCard";
 import { startCheckout } from "@/lib/billing/startCheckout";
@@ -10,7 +9,14 @@ import { useCoach } from "@/lib/coach/useCoach";
 import { useCoachMemories, deleteCoachMemory } from "@/lib/data/coachMemories";
 import { MessageBubble } from "@/components/coach/MessageBubble";
 import { SuggestionCard } from "@/components/coach/SuggestionCard";
+import { Sparkle } from "@/components/coach/Sparkle";
 import { ReportProblem } from "@/components/observability/ReportProblem";
+
+const SAMPLE_PROMPTS = [
+  "Am I overspending on Fun?",
+  "How do I hit my Savings goal?",
+  "Can I afford €200 this weekend?",
+];
 
 export default function Page() {
   const { user } = useAuth();
@@ -19,83 +25,144 @@ export default function Page() {
   const { messages, send, apply, applying, error } = useCoach();
   const { memories, loading: memoriesLoading } = useCoachMemories();
   const [input, setInput] = useState("");
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [lastAttempt, setLastAttempt] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const text = input;
+  // Auto-scroll to bottom on new message or while thinking
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length, sending]);
+
+  async function handleSend(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
     setInput("");
-    await send(text);
-  };
+    setLastAttempt(trimmed);
+    setSending(true);
+    try {
+      await send(trimmed);
+    } finally {
+      setSending(false);
+    }
+  }
 
-  const handleApply = async (suggestion: typeof messages[0]["suggestion"], suggestionId: string) => {
-    if (!suggestion || !suggestionId) return;
+  async function handleRetry() {
+    if (lastAttempt) void handleSend(lastAttempt);
+  }
+
+  async function handleApply(suggestion: NonNullable<typeof messages[number]["suggestion"]>, suggestionId: string) {
     try {
       await apply(suggestion, suggestionId);
-      setDismissedSuggestions((prev) => new Set(prev).add(suggestionId));
+      setDismissed((prev) => new Set(prev).add(suggestionId));
     } catch {
-      // Error handled by useCoach
+      /* useCoach exposes error */
     }
-  };
-
-  const handleDismiss = (suggestionId: string) => {
-    setDismissedSuggestions((prev) => new Set(prev).add(suggestionId));
-  };
+  }
 
   if (premiumLoading || bucketsLoading) {
     return (
-      <div style={{ padding: "1rem" }}>
-        <div style={{ marginBottom: "1.5rem" }}>
-          <SectionLabel>Your AI Coach</SectionLabel>
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-          <div style={{ color: "var(--color-muted)" }}>Loading...</div>
-        </div>
-      </div>
+      <div style={{ padding: "1rem", color: "var(--color-muted)" }}>Loading...</div>
     );
   }
 
   if (!premium) {
     return (
       <div style={{ padding: "1rem" }}>
-        <div style={{ marginBottom: "1.5rem" }}>
-          <SectionLabel>Your AI Coach</SectionLabel>
-        </div>
         <UpgradeCard onUpgrade={() => user && startCheckout(user.uid)} />
       </div>
     );
   }
 
+  const hasConversation = messages.length > 0 || sending;
+
   return (
-    <div style={{ padding: "1rem", display: "flex", flexDirection: "column", height: "calc(100vh - 4rem)" }}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <SectionLabel>Your AI Coach</SectionLabel>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 5rem)" }}>
+      {/* Branded header */}
+      <div
+        style={{
+          padding: "0.9rem 1rem",
+          background: "var(--grad-brand)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          fontWeight: 700,
+          fontSize: "0.95rem",
+        }}
+      >
+        <Sparkle size={16} />
+        <span>MyBuckets Coach</span>
       </div>
 
+      {/* Scroll area */}
       <div
+        ref={scrollRef}
         style={{
           flex: 1,
           overflowY: "auto",
           padding: "1rem",
-          background: "var(--color-card)",
-          borderRadius: "0.5rem",
-          marginBottom: "1rem",
+          background: "var(--color-base)",
         }}
       >
-        {messages.length === 0 && (
-          <div>
-            <div style={{ textAlign: "center", color: "var(--color-muted)", marginTop: "3rem", marginBottom: "2rem" }}>
-              Hi! I'm your AI coach. Ask me anything about your budget.
+        {!hasConversation && (
+          <div style={{ maxWidth: 520, margin: "1rem auto" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--grad-brand)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                <Sparkle size={22} />
+              </div>
+              <div style={{ color: "var(--color-text)", fontSize: "1rem", fontWeight: 600, textAlign: "center" }}>
+                Hi — I&apos;m your Coach.
+              </div>
+              <div style={{ color: "var(--color-muted)", fontSize: "0.875rem", textAlign: "center", lineHeight: 1.5 }}>
+                Ask me about spending, savings, or what to do this month.
+              </div>
             </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.25rem" }}>
+              {SAMPLE_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => void handleSend(prompt)}
+                  disabled={sending}
+                  style={{
+                    padding: "0.65rem 0.9rem",
+                    borderRadius: "12px",
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text)",
+                    fontSize: "0.875rem",
+                    textAlign: "left",
+                    cursor: sending ? "not-allowed" : "pointer",
+                    opacity: sending ? 0.6 : 1,
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
             {!memoriesLoading && memories.length > 0 && (
-              <div style={{ marginTop: "2rem", padding: "1rem", background: "var(--color-base)", borderRadius: "0.5rem" }}>
-                <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)", marginBottom: "0.75rem" }}>
-                  You told me:
+              <div style={{ padding: "0.85rem", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "12px" }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+                  You told me
                 </div>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   {memories.map((m) => (
-                    <li key={m.id} style={{ fontSize: "0.8125rem", color: "var(--color-muted)" }}>
-                      • {m.text}
+                    <li key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--color-text)" }}>
+                      <span style={{ flex: 1 }}>{m.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => user && deleteCoachMemory(user.uid, m.id)}
+                        aria-label={`Forget goal: ${m.text}`}
+                        style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: "0.75rem", cursor: "pointer", padding: "0.15rem 0.4rem" }}
+                      >
+                        Forget
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -103,91 +170,187 @@ export default function Page() {
             )}
           </div>
         )}
+
         {messages.map((msg, idx) => (
           <div key={idx}>
             <MessageBubble role={msg.role} text={msg.text} />
-            {msg.suggestion && msg.suggestionId && !dismissedSuggestions.has(msg.suggestionId) && (
-              <SuggestionCard
-                suggestion={msg.suggestion}
-                buckets={buckets}
-                onApply={() => handleApply(msg.suggestion, msg.suggestionId!)}
-                onDismiss={() => handleDismiss(msg.suggestionId!)}
-              />
+            {msg.suggestion && msg.suggestionId && !dismissed.has(msg.suggestionId) && (
+              <div style={{ marginLeft: "34px", marginBottom: "0.75rem" }}>
+                <SuggestionCard
+                  suggestion={msg.suggestion}
+                  buckets={buckets}
+                  onApply={() => handleApply(msg.suggestion!, msg.suggestionId!)}
+                  onDismiss={() => setDismissed((prev) => new Set(prev).add(msg.suggestionId!))}
+                />
+              </div>
             )}
           </div>
         ))}
+
+        {sending && <ThinkingBubble />}
       </div>
 
-      {!memoriesLoading && memories.length > 0 && (
-        <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "var(--color-card)", borderRadius: "0.5rem" }}>
-          <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)", marginBottom: "0.5rem" }}>
-            Your goals
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {memories.map((m) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-                <div style={{ fontSize: "0.8125rem", color: "var(--color-text)", flex: 1 }}>
-                  {m.text}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => user && deleteCoachMemory(user.uid, m.id)}
-                  style={{
-                    background: "none",
-                    color: "var(--color-muted)",
-                    fontSize: "0.75rem",
-                    cursor: "pointer",
-                    padding: "0.25rem 0.5rem",
-                  }}
-                  aria-label={`Forget goal: ${m.text}`}
-                >
-                  Forget
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* Error strip */}
       {error && (
-        <div style={{ color: "var(--color-danger)", fontSize: "0.875rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span>{error}</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.6rem 1rem",
+            background: "rgba(255,94,87,0.10)",
+            borderTop: "1px solid var(--color-border)",
+            color: "var(--color-danger)",
+            fontSize: "0.8125rem",
+          }}
+        >
+          <span style={{ flex: 1 }}>{error}</span>
+          {lastAttempt && (
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={sending || applying}
+              style={{
+                background: "none",
+                border: "1px solid var(--color-border)",
+                color: "var(--color-text)",
+                padding: "0.25rem 0.65rem",
+                borderRadius: "8px",
+                fontSize: "0.75rem",
+                cursor: sending || applying ? "not-allowed" : "pointer",
+              }}
+            >
+              Retry
+            </button>
+          )}
           <ReportProblem summary="Coach send failed" error={error} />
         </div>
       )}
 
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Ask your coach..."
-          disabled={applying}
+      {/* Composer: pill input with inline send */}
+      <div style={{ padding: "0.75rem 1rem", borderTop: "1px solid var(--color-border)", background: "var(--color-base)" }}>
+        <div
           style={{
-            flex: 1,
-            padding: "0.75rem 1rem",
-            borderRadius: "0.5rem",
-            background: "var(--color-base)",
-            color: "var(--color-text)",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.35rem 0.35rem 0.35rem 1rem",
+            background: "var(--color-card)",
             border: "1px solid var(--color-border)",
-            fontSize: "0.875rem",
-          }}
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!input.trim() || applying}
-          className="px-6 py-3 rounded text-sm font-medium"
-          style={{
-            background: input.trim() && !applying ? "var(--grad-brand)" : "var(--color-base)",
-            color: input.trim() && !applying ? "var(--color-text)" : "var(--color-muted)",
-            cursor: input.trim() && !applying ? "pointer" : "not-allowed",
+            borderRadius: "999px",
           }}
         >
-          Send
-        </button>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSend(input);
+              }
+            }}
+            placeholder="Ask your coach…"
+            disabled={sending || applying}
+            aria-label="Message the coach"
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "var(--color-text)",
+              fontSize: "0.9rem",
+              padding: "0.35rem 0",
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => void handleSend(input)}
+            disabled={!input.trim() || sending || applying}
+            aria-label="Send"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: "50%",
+              background: input.trim() && !sending ? "var(--grad-brand)" : "var(--color-border)",
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "none",
+              cursor: !input.trim() || sending || applying ? "not-allowed" : "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <SendIcon />
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 12l16-8-6 16-2-6-8-2z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ThinkingBubble() {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", marginBottom: "0.75rem" }}>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 26, height: 26, borderRadius: "50%",
+          background: "var(--grad-brand)", color: "#fff",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <Sparkle size={13} />
+      </span>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label="Coach is thinking"
+        style={{
+          padding: "0.75rem 1rem",
+          borderRadius: "14px 14px 14px 4px",
+          background: "var(--color-card)",
+          border: "1px solid var(--color-border)",
+          display: "inline-flex",
+          gap: "4px",
+          alignItems: "center",
+        }}
+      >
+        <Dot delay={0} />
+        <Dot delay={0.15} />
+        <Dot delay={0.3} />
+      </div>
+    </div>
+  );
+}
+
+function Dot({ delay }: { delay: number }) {
+  return (
+    <>
+      <span
+        style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: "var(--color-muted)",
+          display: "inline-block",
+          animation: `coach-dot 1.2s ${delay}s infinite ease-in-out`,
+        }}
+      />
+      <style>{`
+        @keyframes coach-dot {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+          30% { transform: translateY(-3px); opacity: 1; }
+        }
+      `}</style>
+    </>
   );
 }
