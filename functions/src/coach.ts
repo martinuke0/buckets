@@ -1,11 +1,12 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, type CallableResponse } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
-import { GoogleGenAI, Type } from "@google/genai";
-import { buildCoachContext } from "./coachContext";
+import { GoogleGenAI } from "@google/genai";
+import { buildCoachContext, type CoachTxn } from "./coachContext";
 import { buildSpendSummary } from "./spendSummary";
-import { validateSuggestion, type CoachReply, type CoachSuggestion } from "../../lib/coach/suggestion";
+import { validateSuggestion, type CoachSuggestion } from "../../lib/coach/suggestion";
 import { applyRebalance, listCoachMemories, writeCoachMemory } from "./store";
 import { logEvent } from "./logging";
+import { parseCoachReplyStream } from "../../lib/coach/parseReply";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -16,136 +17,137 @@ interface CoachReplyRequest {
 
 /**
  * Callable function: Get AI coach reply with optional rebalance suggestion.
- * Returns { reply: string, suggestion?: CoachSuggestion }.
+ * Streams text chunks to client, returns { fullText: string } with final validated response.
  *
  * Suggestions are validated server-side; invalid suggestions are dropped.
  */
-export const coachReply = onCall<CoachReplyRequest>(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "User must be authenticated");
-  }
-
-  const uid = request.auth.uid;
-  logEvent("coachReply", { uid, outcome: "start" });
-
-  try {
+export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }>, string>(
+  async (request, response) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    const uid = request.auth.uid;
     const { message } = request.data;
+    logEvent("coachReply", { uid, outcome: "start" });
 
-    // Read user's buckets
-    const db = getFirestore();
-    const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
-
-    if (bucketsSnap.empty) {
-      throw new HttpsError(
-        "failed-precondition",
-        "User has no buckets configured"
-      );
-    }
-
-    const buckets = bucketsSnap.docs.map((d) => ({
-      id: d.id,
-      name: d.get("name") as string,
-      remaining: d.get("remaining") as number,
-      allocated: d.get("allocated") as number,
-    }));
-
-    // Current-month transactions for the spend summary (spends + income; summary filters).
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-    const txnsSnap = await db
-      .collection(`users/${uid}/transactions`)
-      .where("bookedAt", ">=", monthStart)
-      .get();
-    const txns = txnsSnap.docs.map((d) => ({
-      description: d.get("description") as string,
-      amount: d.get("amount") as number,
-      bookedAt: d.get("bookedAt") as string,
-      bucketId: (d.get("bucketId") as string | null) ?? null,
-      isIncome: (d.get("isIncome") as boolean) ?? false,
-    }));
-
-    const memories = await listCoachMemories(uid);
-    const summary = buildSpendSummary(
-      buckets.map((b) => ({ id: b.id, name: b.name, allocated: b.allocated, remaining: b.remaining })),
-      txns,
-      now,
-    );
-    const { prompt, bucketIds } = buildCoachContext(summary, memories);
-
-    // Construct the full prompt with user message
-    const fullPrompt = `${prompt}\n\nUser: ${message}\n\nCoach:`;
-
-    // Call Gemini with structured output
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-
-    const res = await ai.models.generateContent({
-      model: MODEL,
-      contents: fullPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            reply: { type: Type.STRING },
-            suggestion: {
-              type: Type.OBJECT,
-              nullable: true,
-              properties: {
-                type: { type: Type.STRING, enum: ["rebalance"] },
-                fromBucketId: { type: Type.STRING, enum: bucketIds },
-                toBucketId: { type: Type.STRING, enum: bucketIds },
-                amount: { type: Type.NUMBER },
-              },
-              required: ["type", "fromBucketId", "toBucketId", "amount"],
-            },
-            memory: { type: Type.STRING, nullable: true },
-          },
-          required: ["reply"],
-        },
-      },
-    });
-
-    // Parse response
-    let parsed: CoachReply;
     try {
-      parsed = JSON.parse(res.text ?? "{}");
-    } catch {
-      throw new HttpsError("internal", "Failed to parse AI response");
-    }
+      const db = getFirestore();
 
-    // Persist memory if present (best-effort, before suggestion validation)
-    if (typeof parsed.memory === "string" && parsed.memory.trim()) {
-      try {
-        await writeCoachMemory(uid, parsed.memory);
-      } catch (err) {
-        console.warn(`coachReply: writeCoachMemory skipped:`, err instanceof Error ? err.message : err);
+      // Buckets (existing).
+      const bucketsSnap = await db.collection(`users/${uid}/buckets`).get();
+      if (bucketsSnap.empty) {
+        throw new HttpsError("failed-precondition", "User has no buckets configured");
       }
-    }
+      const buckets = bucketsSnap.docs.map((d) => ({
+        id: d.id,
+        name: d.get("name") as string,
+        remaining: d.get("remaining") as number,
+        allocated: d.get("allocated") as number,
+      }));
 
-    // Validate suggestion if present
-    if (parsed.suggestion) {
-      const validation = validateSuggestion(
-        parsed.suggestion,
-        buckets.map((b) => ({ id: b.id, remaining: b.remaining }))
+      // Current-month transactions (existing broadened) + anchor timestamp for isPreAnchor.
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        .toISOString()
+        .slice(0, 10);
+      const txnsSnap = await db
+        .collection(`users/${uid}/transactions`)
+        .where("bookedAt", ">=", monthStart)
+        .get();
+      const rawTxns = txnsSnap.docs.map((d) => ({
+        description: d.get("description") as string,
+        amount: d.get("amount") as number,
+        bookedAt: d.get("bookedAt") as string,
+        bucketId: (d.get("bucketId") as string | null) ?? null,
+        isIncome: (d.get("isIncome") as boolean) ?? false,
+      }));
+
+      const metaSnap = await db.doc(`users/${uid}/meta/bank`).get();
+      const anchoredAt = (metaSnap.exists ? (metaSnap.get("anchoredAt") as string | undefined) : undefined) ?? undefined;
+
+      // Derive pre-anchor per-txn + take the most recent 30 by bookedAt desc.
+      const contextTxns: CoachTxn[] = rawTxns
+        .map((t) => ({ ...t, isPreAnchor: anchoredAt ? t.bookedAt < anchoredAt : false }))
+        .sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1))
+        .slice(0, 30);
+
+      const memories = await listCoachMemories(uid);
+      const summary = buildSpendSummary(
+        buckets.map((b) => ({ id: b.id, name: b.name, allocated: b.allocated, remaining: b.remaining })),
+        rawTxns,
+        now,
       );
+      const { prompt, bucketIds } = buildCoachContext(summary, memories, contextTxns);
 
-      if (!validation.ok) {
-        // Drop invalid suggestion - return reply only (memory already persisted)
-        console.warn(
-          `coachReply: dropping invalid suggestion for user ${uid}: ${validation.reason}`
-        );
-        logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: false, hasMemory: Boolean(parsed.memory) });
-        return { reply: parsed.reply };
+      const fullPrompt = `${prompt}\n\nUser: ${message}\n\nCoach:`;
+
+      // Streaming Gemini call.
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+      const stream = await ai.models.generateContentStream({
+        model: MODEL,
+        contents: fullPrompt,
+      });
+
+      let fullText = "";
+      const canStream = typeof (response as CallableResponse<string> | undefined)?.sendChunk === "function";
+      for await (const chunk of stream) {
+        const t = typeof chunk.text === "string" ? chunk.text : "";
+        if (!t) continue;
+        fullText += t;
+        if (canStream) {
+          // Best-effort: sendChunk can reject if the client aborted. Don't crash the reply.
+          try { (response as CallableResponse<string>).sendChunk(t); } catch { /* client aborted */ }
+        }
       }
-    }
 
-    logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(parsed.suggestion), hasMemory: Boolean(parsed.memory) });
-    return parsed;
-  } catch (err) {
-    logEvent("coachReply", { uid, outcome: "error", error: err });
-    throw err;
-  }
-});
+      // Parse the FINAL text (delimiter + JSON footer contract).
+      const parsed = parseCoachReplyStream(fullText);
+
+      // Validate suggestion shape server-side against real buckets (existing gate).
+      let validSuggestion: CoachSuggestion | undefined;
+      const rawSuggestion = parsed.suggestion as Partial<CoachSuggestion> | undefined;
+      if (rawSuggestion && typeof rawSuggestion === "object") {
+        // Only accept if the model used a known bucket ID for both endpoints.
+        if (
+          rawSuggestion.type === "rebalance" &&
+          typeof rawSuggestion.fromBucketId === "string" &&
+          typeof rawSuggestion.toBucketId === "string" &&
+          bucketIds.includes(rawSuggestion.fromBucketId) &&
+          bucketIds.includes(rawSuggestion.toBucketId) &&
+          typeof rawSuggestion.amount === "number"
+        ) {
+          const candidate = rawSuggestion as CoachSuggestion;
+          const check = validateSuggestion(candidate, buckets.map((b) => ({ id: b.id, remaining: b.remaining })));
+          if (check.ok) validSuggestion = candidate;
+          else console.warn(`coachReply: dropping invalid suggestion for user ${uid}: ${check.reason}`);
+        }
+      }
+
+      // Best-effort memory persist (existing rule).
+      if (typeof parsed.memory === "string" && parsed.memory.trim()) {
+        try { await writeCoachMemory(uid, parsed.memory); }
+        catch (err) { console.warn(`coachReply: writeCoachMemory skipped:`, err instanceof Error ? err.message : err); }
+      }
+
+      logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(validSuggestion), hasMemory: Boolean(parsed.memory) });
+
+      // Re-serialize the final text so the client's parse yields the SAME shape the
+      // server validated: reply + (only if valid) suggestion + memory.
+      const replyOnly = parsed.reply;
+      const meta: Record<string, unknown> = {};
+      if (validSuggestion) meta.suggestion = validSuggestion;
+      if (typeof parsed.memory === "string" && parsed.memory.trim()) meta.memory = parsed.memory;
+      const finalText = Object.keys(meta).length > 0
+        ? `${replyOnly}\n---META---\n${JSON.stringify(meta)}`
+        : replyOnly;
+
+      return { fullText: finalText };
+    } catch (err) {
+      logEvent("coachReply", { uid, outcome: "error", error: err });
+      throw err;
+    }
+  },
+);
 
 interface ApplyCoachSuggestionRequest {
   suggestion: CoachSuggestion;
