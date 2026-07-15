@@ -184,8 +184,8 @@ export default function Page() {
           </div>
         )}
 
-        {messages.map((msg, idx) => (
-          <div key={idx}>
+        {messages.map((msg) => (
+          <div key={msg.id}>
             <MessageBubble role={msg.role} text={msg.text} />
             {msg.suggestion && msg.suggestionId && (msg.appliedAt || !dismissed.has(msg.suggestionId)) && (
               <div style={{ marginLeft: "34px", marginBottom: "0.75rem" }}>

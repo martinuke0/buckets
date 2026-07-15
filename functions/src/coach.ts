@@ -102,8 +102,15 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
         if (!t) continue;
         fullText += t;
         if (canStream) {
-          // Best-effort: sendChunk can reject if the client aborted. Don't crash the reply.
-          try { (response as CallableResponse<string>).sendChunk(t); } catch { /* client aborted */ }
+          // sendChunk returns a Promise; on client abort it can reject asynchronously.
+          // Swallow both sync throws and async rejections so the loop keeps accumulating
+          // fullText for server-side validation regardless of the client's presence.
+          try {
+            const maybePromise = (response as CallableResponse<string>).sendChunk(t) as unknown;
+            if (maybePromise && typeof (maybePromise as Promise<unknown>).then === "function") {
+              (maybePromise as Promise<unknown>).catch(() => { /* client aborted */ });
+            }
+          } catch { /* client aborted (sync throw) */ }
         }
       }
 
