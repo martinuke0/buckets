@@ -30,6 +30,9 @@ interface CoachMessageDoc {
   text: string;
   suggestion?: CoachSuggestion;
   suggestionId?: string;
+  // Client-only writer/reader: Firestore Timestamp is intentional (ordered by
+  // orderBy("createdAt")). Do NOT append coachMessages server-side with an ISO
+  // string — mixed Timestamp/string types sort in separate groups and break order.
   createdAt: Timestamp;
 }
 

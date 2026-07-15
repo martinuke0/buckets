@@ -99,9 +99,13 @@ describe("useCoach persistence", () => {
     const db = getDb();
     const col = collection(db, coachMessagesCol("test-uid"));
 
+    // Use the REAL CoachSuggestion shape (rebalance) so this test guards the
+    // persisted schema, not an arbitrary object the mock would accept anyway.
     const suggestion = {
-      action: "create_bucket" as const,
-      params: { name: "Test", goal: 100 },
+      type: "rebalance" as const,
+      fromBucketId: "fun",
+      toBucketId: "savings",
+      amount: 4000,
     };
     const suggestionId = "test-id";
 
