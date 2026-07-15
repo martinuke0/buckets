@@ -27,7 +27,7 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     const uid = request.auth.uid;
-    const { message } = request.data;
+    const { message, history } = request.data;
     logEvent("coachReply", { uid, outcome: "start" });
 
     try {
@@ -79,7 +79,14 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
       );
       const { prompt, bucketIds } = buildCoachContext(summary, memories, contextTxns);
 
-      const fullPrompt = `${prompt}\n\nUser: ${message}\n\nCoach:`;
+      // Include the last few conversation turns so the coach has short-term memory
+      // across the same session. The client caps history at ~5 (useCoach.ts).
+      const historyBlock = history && history.length > 0
+        ? `\n\nRecent conversation (oldest first):\n${history
+            .map((h) => `${h.role === "user" ? "User" : "Coach"}: ${h.text}`)
+            .join("\n")}`
+        : "";
+      const fullPrompt = `${prompt}${historyBlock}\n\nUser: ${message}\n\nCoach:`;
 
       // Streaming Gemini call.
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
