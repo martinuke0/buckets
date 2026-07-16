@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="Buckets">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9945FF"/>
+      <stop offset="1" stop-color="#14F195"/>
+    </linearGradient>
+    <clipPath id="body">
+      <path d="M14 22 L58 22 L52 60 Q52 62 50 62 L22 62 Q20 62 20 60 Z"/>
+    </clipPath>
+  </defs>
+  <rect x="12" y="34" width="48" height="30" fill="url(#grad)" clip-path="url(#body)"/>
+  <path d="M14 22 L58 22 L52 60 Q52 62 50 62 L22 62 Q20 62 20 60 Z" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+  <ellipse cx="36" cy="22" rx="22" ry="4" stroke="#E8EAED" stroke-width="2.5" fill="none"/>
+  <path d="M22 22 Q22 10 36 10 Q50 10 50 22" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

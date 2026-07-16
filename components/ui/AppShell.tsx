@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Logo, Wordmark } from "@/components/ui/primitives";
+import { Lockup } from "@/components/ui/primitives";
 
 interface AppShellProps {
   children: ReactNode;
@@ -16,10 +16,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <div className="flex items-center gap-2">
-          <Logo size={32} />
-          <Wordmark size={20} />
-        </div>
+        <Lockup size={32} />
         {rightSlot && <div>{rightSlot}</div>}
       </header>
 

@@ -42,7 +42,8 @@ export function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-// Wordmark: "Buckets" in the Solana gradient. Companion to Logo.
+// Wordmark: "Buckets" in the Solana gradient. Standalone text mark; used when the
+// icon would be too small (dense text runs, footer credits, etc).
 export function Wordmark({ size = 20 }: { size?: number }) {
   const gid = useId();
   return (
@@ -69,6 +70,76 @@ export function Wordmark({ size = 20 }: { size?: number }) {
         letterSpacing="-1"
       >
         Buckets
+      </text>
+    </svg>
+  );
+}
+
+// Lockup: the primary Buckets brand. Bucket-as-B + small "uckets" — the bucket
+// icon takes the place of the "B" so the whole mark reads as the word "Buckets".
+// Use this in AppShell top bar, sign-in H1, splash screens.
+export function Lockup({ size = 32 }: { size?: number }) {
+  const gid = useId();
+  const cid = useId();
+  const w = (size / 32) * 180; // proportional viewBox width — keeps intrinsic aspect ratio
+  return (
+    <svg
+      width={w}
+      height={size * (72 / 32)}
+      viewBox="0 0 180 72"
+      role="img"
+      aria-label="Buckets"
+    >
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#9945FF" />
+          <stop offset="1" stopColor="#14F195" />
+        </linearGradient>
+        <clipPath id={cid}>
+          <path d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z" />
+        </clipPath>
+      </defs>
+      {/* Bucket-as-B: outline with gradient fill + "B" inside */}
+      <rect x="2" y="32" width="60" height="34" fill={`url(#${gid})`} clipPath={`url(#${cid})`} />
+      <path
+        d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z"
+        stroke="var(--color-text)"
+        strokeWidth="2.5"
+        fill="none"
+        strokeLinejoin="round"
+      />
+      <ellipse cx="32" cy="20" rx="28" ry="4" stroke="var(--color-text)" strokeWidth="2.5" fill="none" />
+      <path
+        d="M14 20 Q14 6 32 6 Q50 6 50 20"
+        stroke="var(--color-text)"
+        strokeWidth="2.5"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <text
+        x="32"
+        y="54"
+        textAnchor="middle"
+        fill="var(--color-text)"
+        fontFamily="-apple-system, SF Pro Display, system-ui, sans-serif"
+        fontWeight="900"
+        fontSize="30"
+      >
+        B
+      </text>
+      {/* "uckets" — extra-small, muted, optically centered on the bucket body */}
+      <text
+        x="66"
+        y="50"
+        fill="var(--color-text)"
+        fontFamily="-apple-system, SF Pro Display, system-ui, sans-serif"
+        fontWeight="600"
+        fontSize="20"
+        letterSpacing="-0.6"
+        dominantBaseline="middle"
+        opacity="0.85"
+      >
+        uckets
       </text>
     </svg>
   );
