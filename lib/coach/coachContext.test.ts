@@ -65,3 +65,21 @@ describe("buildCoachContext today grounding", () => {
     expect(prompt).not.toMatch(/Today is /);
   });
 });
+
+describe("buildCoachContext anti-hallucination rules", () => {
+  it("tells the model it cannot move money itself", () => {
+    const { prompt } = buildCoachContext(summary, []);
+    expect(prompt).toMatch(/cannot move money yourself/i);
+    expect(prompt).toMatch(/Apply button/);
+  });
+  it("forbids past-tense claims of having moved money", () => {
+    const { prompt } = buildCoachContext(summary, []);
+    expect(prompt).toMatch(/transfers are complete/);
+    expect(prompt).toMatch(/NEVER say/);
+  });
+  it("teaches single-rebalance-per-turn for multi-transfer requests", () => {
+    const { prompt } = buildCoachContext(summary, []);
+    expect(prompt).toMatch(/only ONE rebalance per turn/);
+    expect(prompt).toMatch(/queue the next one after they apply/);
+  });
+});
