@@ -1,19 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="180" height="72" viewBox="0 0 180 72" role="img" aria-label="Buckets">
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="72" viewBox="0 0 140 72" role="img" aria-label="Buckets">
   <defs>
     <linearGradient id="grad" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#9945FF"/>
       <stop offset="1" stop-color="#14F195"/>
     </linearGradient>
     <clipPath id="body">
-      <path d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z"/>
+      <path d="M6 22 L46 22 L38 62 Q38 64 36 64 L16 64 Q14 64 14 62 Z"/>
     </clipPath>
   </defs>
-  <!-- Bucket-as-B: outline bucket with gradient liquid fill + light "B" glyph inside -->
-  <rect x="2" y="32" width="60" height="34" fill="url(#grad)" clip-path="url(#body)"/>
-  <path d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
-  <ellipse cx="32" cy="20" rx="28" ry="4" stroke="#E8EAED" stroke-width="2.5" fill="none"/>
-  <path d="M14 20 Q14 6 32 6 Q50 6 50 20" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <text x="32" y="54" text-anchor="middle" fill="#E8EAED" font-family="-apple-system, SF Pro Display, system-ui, sans-serif" font-weight="900" font-size="30">B</text>
-  <!-- "uckets" — extra-small, muted, optically centered on bucket body -->
-  <text x="66" y="50" fill="#E8EAED" font-family="-apple-system, SF Pro Display, system-ui, sans-serif" font-weight="600" font-size="20" letter-spacing="-0.6" dominant-baseline="middle" opacity="0.85">uckets</text>
+  <rect x="4" y="34" width="44" height="30" fill="url(#grad)" clip-path="url(#body)"/>
+  <path d="M6 22 L46 22 L38 62 Q38 64 36 64 L16 64 Q14 64 14 62 Z" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+  <ellipse cx="26" cy="22" rx="20" ry="3.5" stroke="#E8EAED" stroke-width="2.5" fill="none"/>
+  <path d="M14 22 Q14 10 26 10 Q38 10 38 22" stroke="#E8EAED" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <text x="26" y="55" text-anchor="middle" fill="#E8EAED" font-family="-apple-system, SF Pro Display, system-ui, sans-serif" font-weight="900" font-size="26">B</text>
+  <text x="48" y="50" fill="#E8EAED" font-family="-apple-system, SF Pro Display, system-ui, sans-serif" font-weight="600" font-size="16" letter-spacing="-0.4" dominant-baseline="middle" opacity="0.85">uckets</text>
 </svg>

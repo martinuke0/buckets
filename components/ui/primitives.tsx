@@ -77,16 +77,17 @@ export function Wordmark({ size = 20 }: { size?: number }) {
 
 // Lockup: the primary Buckets brand. Bucket-as-B + small "uckets" — the bucket
 // icon takes the place of the "B" so the whole mark reads as the word "Buckets".
-// Use this in AppShell top bar, sign-in H1, splash screens.
+// Bucket is intentionally tapered (not a square) so it reads as a bucket, not a bag;
+// "uckets" hugs the right edge so the word reads as one unit.
 export function Lockup({ size = 32 }: { size?: number }) {
   const gid = useId();
   const cid = useId();
-  const w = (size / 32) * 180; // proportional viewBox width — keeps intrinsic aspect ratio
+  const w = (size / 32) * 140;
   return (
     <svg
       width={w}
       height={size * (72 / 32)}
-      viewBox="0 0 180 72"
+      viewBox="0 0 140 72"
       role="img"
       aria-label="Buckets"
     >
@@ -96,46 +97,51 @@ export function Lockup({ size = 32 }: { size?: number }) {
           <stop offset="1" stopColor="#14F195" />
         </linearGradient>
         <clipPath id={cid}>
-          <path d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z" />
+          {/* Tapered bucket body: rim at x=6..46, base at x=14..38 */}
+          <path d="M6 22 L46 22 L38 62 Q38 64 36 64 L16 64 Q14 64 14 62 Z" />
         </clipPath>
       </defs>
-      {/* Bucket-as-B: outline with gradient fill + "B" inside */}
-      <rect x="2" y="32" width="60" height="34" fill={`url(#${gid})`} clipPath={`url(#${cid})`} />
+      {/* Gradient liquid fill inside the bucket */}
+      <rect x="4" y="34" width="44" height="30" fill={`url(#${gid})`} clipPath={`url(#${cid})`} />
+      {/* Bucket outline (tapered) */}
       <path
-        d="M4 20 L60 20 L54 62 Q54 64 52 64 L14 64 Q12 64 12 62 Z"
+        d="M6 22 L46 22 L38 62 Q38 64 36 64 L16 64 Q14 64 14 62 Z"
         stroke="var(--color-text)"
         strokeWidth="2.5"
         fill="none"
         strokeLinejoin="round"
       />
-      <ellipse cx="32" cy="20" rx="28" ry="4" stroke="var(--color-text)" strokeWidth="2.5" fill="none" />
+      {/* Rim ellipse — narrower than before */}
+      <ellipse cx="26" cy="22" rx="20" ry="3.5" stroke="var(--color-text)" strokeWidth="2.5" fill="none" />
+      {/* Handle — shorter arc */}
       <path
-        d="M14 20 Q14 6 32 6 Q50 6 50 20"
+        d="M14 22 Q14 10 26 10 Q38 10 38 22"
         stroke="var(--color-text)"
         strokeWidth="2.5"
         fill="none"
         strokeLinecap="round"
       />
+      {/* "B" glyph inside the bucket, centered on the body */}
       <text
-        x="32"
-        y="54"
+        x="26"
+        y="55"
         textAnchor="middle"
         fill="var(--color-text)"
         fontFamily="-apple-system, SF Pro Display, system-ui, sans-serif"
         fontWeight="900"
-        fontSize="30"
+        fontSize="26"
       >
         B
       </text>
-      {/* "uckets" — extra-small, muted, optically centered on the bucket body */}
+      {/* "uckets" — hugs the bucket's right edge; small, muted, mid-baseline */}
       <text
-        x="66"
+        x="48"
         y="50"
         fill="var(--color-text)"
         fontFamily="-apple-system, SF Pro Display, system-ui, sans-serif"
         fontWeight="600"
-        fontSize="20"
-        letterSpacing="-0.6"
+        fontSize="16"
+        letterSpacing="-0.4"
         dominantBaseline="middle"
         opacity="0.85"
       >
