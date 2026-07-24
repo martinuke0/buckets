@@ -46,3 +46,7 @@ yarn-error.log*
 next-env.d.ts
 firestore-debug.log
 firebase-debug.log
+
+# firebase emulator / data exports (may contain user data)
+/emulator-data/
+/firebase-export-*/
