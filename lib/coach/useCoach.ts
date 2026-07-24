@@ -5,8 +5,7 @@ import { getFirebaseApp, getDb } from "@/lib/firebase/client";
 import { collection, addDoc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
 import { coachMessagesCol } from "@/lib/model/paths";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import type { CoachSuggestion } from "./suggestion";
-import { parseCoachReplyStream } from "@/lib/coach/parseReply";
+import type { CoachSuggestion, CoachReply } from "./suggestion";
 import { updateCoachMessageApplied } from "@/lib/data/coachMessages";
 import { logAction } from "@/lib/observability/breadcrumbs";
 
@@ -91,27 +90,17 @@ export function useCoach() {
       const history = messagesRef.current.slice(-5).map((m) => ({ role: m.role, text: m.text }));
 
       const fn = getCoachFunctions();
-      const callable = httpsCallable<CoachReplyRequest, { fullText: string }, string>(fn, "coachReply");
-      const { stream, data } = await callable.stream({ message: text, history });
-
-      let accum = "";
-      for await (const chunk of stream) {
-        accum += chunk;
-        setStreamingText(accum);
-      }
-      const result = await data;
-      const finalText = result?.fullText ?? accum;
-
-      const parsed = parseCoachReplyStream(finalText);
+      const callable = httpsCallable<CoachReplyRequest, CoachReply>(fn, "coachReply");
+      const { data } = await callable({ message: text, history });
 
       // Firestore rejects `undefined`. Only include suggestion + suggestionId when present.
       const doc: Record<string, unknown> = {
         role: "coach",
-        text: parsed.reply,
+        text: data.reply,
         createdAt: Timestamp.now(),
       };
-      if (parsed.suggestion && typeof parsed.suggestion === "object") {
-        doc.suggestion = parsed.suggestion;
+      if (data.suggestion && typeof data.suggestion === "object") {
+        doc.suggestion = data.suggestion;
         doc.suggestionId = crypto.randomUUID();
       }
       await addDoc(collection(getDb(), coachMessagesCol(user.uid)), doc);

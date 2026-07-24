@@ -3,18 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { useCoach } from "@/lib/coach/useCoach";
 
 const addDocFn = vi.fn().mockResolvedValue({ id: "doc-id" });
-const streamCallable: {
-  stream: (_input: unknown) => Promise<{ stream: AsyncIterable<string>; data: Promise<{ fullText: string }> }>;
-} = {
-  stream: async (_input: unknown) => ({
-    stream: (async function*() {
-      yield "hel";
-      yield "lo, ";
-      yield "there";
-    })(),
-    data: Promise.resolve({ fullText: "hello, there" }),
-  }),
-};
+type CoachReplyResult = { reply: string; suggestion?: unknown; memory?: string };
+// The callable resolves directly to { data: CoachReply } — no streaming.
+const callableFn = vi.fn(async (_input: unknown) => ({ data: { reply: "hello, there" } as CoachReplyResult }));
 
 // Stable references to prevent resubscribe loop
 const mockAuth = { user: { uid: "u1", email: null }, loading: false };
@@ -58,7 +49,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("firebase/functions", () => ({
   getFunctions: () => ({}),
-  httpsCallable: () => streamCallable,
+  httpsCallable: () => callableFn,
   connectFunctionsEmulator: vi.fn(),
 }));
 
@@ -76,34 +67,11 @@ function Probe() {
   return <div data-testid="messages">{messages.map((m) => `${m.role}: ${m.text}`).join(" | ")}</div>;
 }
 
-vi.mock("@/lib/coach/parseReply", () => ({
-  parseCoachReplyStream: (text: string) => {
-    // Simple mock: split by ---META--- delimiter
-    const parts = text.split("\n---META---\n");
-    if (parts.length === 1) {
-      return { reply: text };
-    }
-    try {
-      const meta = JSON.parse(parts[1]);
-      return { reply: parts[0], suggestion: meta.suggestion };
-    } catch {
-      return { reply: text };
-    }
-  },
-}));
-
 describe("useCoach persistence", () => {
   beforeEach(() => {
     addDocFn.mockClear();
-    // Reset streamCallable to default
-    streamCallable.stream = async (_input: unknown) => ({
-      stream: (async function*() {
-        yield "hel";
-        yield "lo, ";
-        yield "there";
-      })(),
-      data: Promise.resolve({ fullText: "hello, there" }),
-    });
+    callableFn.mockClear();
+    callableFn.mockImplementation(async (_input: unknown) => ({ data: { reply: "hello, there" } }));
   });
 
   it("exposes streamed messages from snapshot", async () => {
@@ -162,21 +130,14 @@ describe("useCoach persistence", () => {
   });
 });
 
-describe("useCoach streaming", () => {
+describe("useCoach send", () => {
   beforeEach(() => {
     addDocFn.mockClear();
-    // Reset streamCallable to default
-    streamCallable.stream = async (_input: unknown) => ({
-      stream: (async function*(): AsyncGenerator<string> {
-        yield "hel";
-        yield "lo, ";
-        yield "there";
-      })(),
-      data: Promise.resolve({ fullText: "hello, there" }),
-    });
+    callableFn.mockClear();
+    callableFn.mockImplementation(async (_input: unknown) => ({ data: { reply: "hello, there" } }));
   });
 
-  it("streams chunks into streamingText, then writes one coach doc", async () => {
+  it("shows the thinking placeholder during the call, then writes one coach doc", async () => {
     function StreamProbe() {
       const hook = useCoach();
       return (
@@ -201,13 +162,7 @@ describe("useCoach streaming", () => {
       expect.objectContaining({ role: "user", text: "hi" })
     ));
 
-    // During streaming, streamingText should accumulate
-    await waitFor(() => {
-      const text = screen.getByTestId("streaming").textContent;
-      return text !== "null" && text !== "";
-    });
-
-    // After stream ends, should write coach doc and streamingText returns to null
+    // After the call resolves, should write coach doc and streamingText returns to null
     await waitFor(() => {
       expect(addDocFn).toHaveBeenCalledWith(
         expect.anything(),
@@ -223,15 +178,13 @@ describe("useCoach streaming", () => {
     expect(addDocFn).toHaveBeenCalledTimes(2);
   });
 
-  it("includes suggestion + suggestionId when footer contains a valid rebalance", async () => {
-    streamCallable.stream = async (_input: unknown) => ({
-      stream: (async function*(): AsyncGenerator<string> {
-        yield "Move some to savings?";
-      })(),
-      data: Promise.resolve({
-        fullText: 'Move some to savings?\n---META---\n{"suggestion":{"type":"rebalance","fromBucketId":"fun","toBucketId":"savings","amount":4000}}',
-      }),
-    });
+  it("includes suggestion + suggestionId when the reply carries a valid rebalance", async () => {
+    callableFn.mockImplementation(async (_input: unknown) => ({
+      data: {
+        reply: "Move some to savings?",
+        suggestion: { type: "rebalance", fromBucketId: "fun", toBucketId: "savings", amount: 4000 },
+      },
+    }));
 
     function StreamProbe() {
       const hook = useCoach();
@@ -266,13 +219,8 @@ describe("useCoach streaming", () => {
     expect(coachCall![1].suggestionId).toMatch(/^[a-f0-9-]+$/); // UUID format
   });
 
-  it("excludes suggestion + suggestionId when footer is absent", async () => {
-    streamCallable.stream = async (_input: unknown) => ({
-      stream: (async function*(): AsyncGenerator<string> {
-        yield "Just a plain response";
-      })(),
-      data: Promise.resolve({ fullText: "Just a plain response" }),
-    });
+  it("excludes suggestion + suggestionId when the reply carries none", async () => {
+    callableFn.mockImplementation(async (_input: unknown) => ({ data: { reply: "Just a plain response" } }));
 
     function StreamProbe() {
       const hook = useCoach();

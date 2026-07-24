@@ -1,14 +1,30 @@
-import { onCall, HttpsError, type CallableResponse } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { buildCoachContext, type CoachTxn } from "./coachContext";
 import { buildSpendSummary } from "./spendSummary";
-import { validateSuggestion, type CoachSuggestion } from "../../lib/coach/suggestion";
+import { validateSuggestion, type CoachSuggestion, type CoachReply } from "../../lib/coach/suggestion";
 import { applyRebalance, listCoachMemories, writeCoachMemory } from "./store";
 import { logEvent } from "./logging";
-import { parseCoachReplyStream } from "../../lib/coach/parseReply";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+// Gemini returns JSON matching our responseSchema. Parse defensively: any malformed
+// output (should not happen with a schema, but never crash the call) degrades to an
+// empty reply rather than throwing.
+function parseStructuredReply(text: string | undefined): CoachReply {
+  if (!text) return { reply: "" };
+  try {
+    const o = JSON.parse(text) as Partial<CoachReply>;
+    return {
+      reply: typeof o.reply === "string" ? o.reply : "",
+      suggestion: o.suggestion,
+      memory: typeof o.memory === "string" ? o.memory : undefined,
+    };
+  } catch {
+    return { reply: "" };
+  }
+}
 
 interface CoachReplyRequest {
   message: string;
@@ -17,12 +33,13 @@ interface CoachReplyRequest {
 
 /**
  * Callable function: Get AI coach reply with optional rebalance suggestion.
- * Streams text chunks to client, returns { fullText: string } with final validated response.
- *
- * Suggestions are validated server-side; invalid suggestions are dropped.
+ * Returns a structured { reply, suggestion?, memory? } via Gemini's native responseSchema —
+ * no prose wire-protocol to parse. Bucket IDs are enum-constrained to the user's real buckets,
+ * so the model cannot emit an unknown bucket; validateSuggestion still gates funds/positivity.
+ * Invalid suggestions are dropped.
  */
-export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }>, string>(
-  async (request, response) => {
+export const coachReply = onCall<CoachReplyRequest, Promise<CoachReply>>(
+  async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
@@ -89,74 +106,62 @@ export const coachReply = onCall<CoachReplyRequest, Promise<{ fullText: string }
         : "";
       const fullPrompt = `${prompt}${historyBlock}\n\nUser: ${message}\n\nCoach:`;
 
-      // Streaming Gemini call.
+      // Single structured Gemini call. responseSchema forces valid JSON — no prose to parse.
+      // Bucket IDs are enum-constrained to the user's real buckets, so the model cannot name
+      // an unknown bucket (deletes the old bucketIds.includes guard).
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-      const stream = await ai.models.generateContentStream({
+      const res = await ai.models.generateContent({
         model: MODEL,
         contents: fullPrompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: { type: Type.STRING },
+              suggestion: {
+                type: Type.OBJECT,
+                nullable: true,
+                properties: {
+                  type: { type: Type.STRING, enum: ["rebalance"] },
+                  fromBucketId: { type: Type.STRING, enum: bucketIds },
+                  toBucketId: { type: Type.STRING, enum: bucketIds },
+                  amount: { type: Type.INTEGER },
+                },
+                required: ["type", "fromBucketId", "toBucketId", "amount"],
+              },
+              memory: { type: Type.STRING, nullable: true },
+            },
+            required: ["reply"],
+          },
+        },
       });
 
-      let fullText = "";
-      const canStream = typeof (response as CallableResponse<string> | undefined)?.sendChunk === "function";
-      for await (const chunk of stream) {
-        const t = typeof chunk.text === "string" ? chunk.text : "";
-        if (!t) continue;
-        fullText += t;
-        if (canStream) {
-          // sendChunk returns a Promise; on client abort it can reject asynchronously.
-          // Swallow both sync throws and async rejections so the loop keeps accumulating
-          // fullText for server-side validation regardless of the client's presence.
-          try {
-            const maybePromise = (response as CallableResponse<string>).sendChunk(t) as unknown;
-            if (maybePromise && typeof (maybePromise as Promise<unknown>).then === "function") {
-              (maybePromise as Promise<unknown>).catch(() => { /* client aborted */ });
-            }
-          } catch { /* client aborted (sync throw) */ }
-        }
-      }
+      const parsed = parseStructuredReply(res.text);
 
-      // Parse the FINAL text (delimiter + JSON footer contract).
-      const parsed = parseCoachReplyStream(fullText);
-
-      // Validate suggestion shape server-side against real buckets (existing gate).
+      // Validate suggestion server-side against real buckets (funds/positivity — the schema
+      // already guarantees shape + known bucket IDs). Drop on failure.
       let validSuggestion: CoachSuggestion | undefined;
-      const rawSuggestion = parsed.suggestion as Partial<CoachSuggestion> | undefined;
-      if (rawSuggestion && typeof rawSuggestion === "object") {
-        // Only accept if the model used a known bucket ID for both endpoints.
-        if (
-          rawSuggestion.type === "rebalance" &&
-          typeof rawSuggestion.fromBucketId === "string" &&
-          typeof rawSuggestion.toBucketId === "string" &&
-          bucketIds.includes(rawSuggestion.fromBucketId) &&
-          bucketIds.includes(rawSuggestion.toBucketId) &&
-          typeof rawSuggestion.amount === "number"
-        ) {
-          const candidate = rawSuggestion as CoachSuggestion;
-          const check = validateSuggestion(candidate, buckets.map((b) => ({ id: b.id, remaining: b.remaining })));
-          if (check.ok) validSuggestion = candidate;
-          else console.warn(`coachReply: dropping invalid suggestion for user ${uid}: ${check.reason}`);
-        }
+      if (parsed.suggestion) {
+        const check = validateSuggestion(parsed.suggestion, buckets.map((b) => ({ id: b.id, remaining: b.remaining })));
+        if (check.ok) validSuggestion = parsed.suggestion;
+        else console.warn(`coachReply: dropping invalid suggestion for user ${uid}: ${check.reason}`);
       }
 
       // Best-effort memory persist (existing rule).
-      if (typeof parsed.memory === "string" && parsed.memory.trim()) {
-        try { await writeCoachMemory(uid, parsed.memory); }
+      const memory = parsed.memory?.trim() || undefined;
+      if (memory) {
+        try { await writeCoachMemory(uid, memory); }
         catch (err) { console.warn(`coachReply: writeCoachMemory skipped:`, err instanceof Error ? err.message : err); }
       }
 
-      logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(validSuggestion), hasMemory: Boolean(parsed.memory) });
+      logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(validSuggestion), hasMemory: Boolean(memory) });
 
-      // Re-serialize the final text so the client's parse yields the SAME shape the
-      // server validated: reply + (only if valid) suggestion + memory.
-      const replyOnly = parsed.reply;
-      const meta: Record<string, unknown> = {};
-      if (validSuggestion) meta.suggestion = validSuggestion;
-      if (typeof parsed.memory === "string" && parsed.memory.trim()) meta.memory = parsed.memory;
-      const finalText = Object.keys(meta).length > 0
-        ? `${replyOnly}\n---META---\n${JSON.stringify(meta)}`
-        : replyOnly;
-
-      return { fullText: finalText };
+      return {
+        reply: parsed.reply,
+        ...(validSuggestion ? { suggestion: validSuggestion } : {}),
+        ...(memory ? { memory } : {}),
+      };
     } catch (err) {
       logEvent("coachReply", { uid, outcome: "error", error: err });
       throw err;

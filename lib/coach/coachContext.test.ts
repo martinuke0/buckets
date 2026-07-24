@@ -49,9 +49,11 @@ describe("buildCoachContext transactions section", () => {
     // guidance line present
     expect(prompt).toMatch(/Pre-anchor entries are historical/);
   });
-  it("instructs the model on the ---META--- contract", () => {
+  it("instructs the model on the structured reply/suggestion/memory fields", () => {
     const { prompt } = buildCoachContext(summary, [], []);
-    expect(prompt).toMatch(/---META---/);
+    expect(prompt).toMatch(/`reply`/);
+    expect(prompt).toMatch(/`suggestion`/);
+    expect(prompt).toMatch(/`memory`/);
   });
 });
 
