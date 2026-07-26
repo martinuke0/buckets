@@ -50,3 +50,6 @@ firebase-debug.log
 # firebase emulator / data exports (may contain user data)
 /emulator-data/
 /firebase-export-*/
+
+# playwright mcp scratch (screenshots, snapshots, console logs)
+/.playwright-mcp/

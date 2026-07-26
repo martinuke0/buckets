@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useBuckets } from "@/lib/data/useBuckets";
 import { useCoach } from "@/lib/coach/useCoach";
 import { useCoachMemories, deleteCoachMemory } from "@/lib/data/coachMemories";
+import { useCoachConversations, deleteCoachConversation } from "@/lib/data/coachConversations";
 import { MessageBubble } from "@/components/coach/MessageBubble";
 import { SuggestionCard } from "@/components/coach/SuggestionCard";
 import { CoachToast } from "@/components/coach/CoachToast";
@@ -19,16 +20,29 @@ const SAMPLE_PROMPTS = [
   "Can I afford €200 this weekend?",
 ];
 
+const headerBtn: React.CSSProperties = {
+  background: "var(--color-card)",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text)",
+  padding: "0.3rem 0.6rem",
+  borderRadius: "8px",
+  fontSize: "0.75rem",
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
 export default function Page() {
   const { user } = useAuth();
   const { premium, loading: premiumLoading } = usePremium();
   const { buckets, loading: bucketsLoading } = useBuckets();
-  const { messages, send, apply, applying, error, streamingText, justApplied, dismissJustApplied } = useCoach();
+  const { messages, send, apply, applying, error, streamingText, justApplied, dismissJustApplied, conversationId, newConversation, openConversation } = useCoach();
   const { memories, loading: memoriesLoading } = useCoachMemories();
+  const { conversations } = useCoachConversations();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [lastAttempt, setLastAttempt] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new message or while streaming
@@ -110,7 +124,7 @@ export default function Page() {
             >
               <Sparkle size={14} />
             </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
               <div
                 style={{
                   fontSize: "0.95rem",
@@ -127,7 +141,59 @@ export default function Page() {
                 Grounded in this month&apos;s budget
               </div>
             </div>
+            <button
+              type="button"
+              onClick={newConversation}
+              disabled={!hasConversation}
+              aria-label="Start a new conversation"
+              style={{ ...headerBtn, cursor: hasConversation ? "pointer" : "not-allowed", opacity: hasConversation ? 1 : 0.5 }}
+            >
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              aria-expanded={showHistory}
+              aria-label="Past conversations"
+              style={headerBtn}
+            >
+              History{conversations.length > 0 ? ` (${conversations.length})` : ""}
+            </button>
           </div>
+
+          {showHistory && (
+            <div style={{ marginBottom: "1rem", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "12px", overflow: "hidden" }}>
+              {conversations.length === 0 ? (
+                <div style={{ padding: "0.85rem", fontSize: "0.8125rem", color: "var(--color-muted)" }}>No past conversations yet.</div>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {conversations.map((c) => (
+                    <li key={c.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.85rem", borderBottom: "1px solid var(--color-border)" }}>
+                      <button
+                        type="button"
+                        onClick={() => { openConversation(c.id); setShowHistory(false); }}
+                        style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: c.id === conversationId ? 700 : 400, color: c.id === conversationId ? "var(--color-text)" : "var(--color-text)" }}
+                      >
+                        {c.title}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!user) return;
+                          await deleteCoachConversation(user.uid, c.id);
+                          if (c.id === conversationId) newConversation();
+                        }}
+                        aria-label={`Delete conversation: ${c.title}`}
+                        style={{ background: "none", border: "none", color: "var(--color-muted)", fontSize: "0.75rem", cursor: "pointer", padding: "0.15rem 0.4rem" }}
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {!hasConversation && (
             <>
@@ -251,17 +317,25 @@ export default function Page() {
         </div>
       )}
 
-      {/* Composer: pill input with inline send */}
-      <div style={{ padding: "0.75rem 1rem", borderTop: "1px solid var(--color-border)", background: "var(--color-base)" }}>
+      {/* Composer: floats just above the nav pill so the two read as one bottom
+          cluster; chat scrolls behind it. Width-matched to the nav pill (420px). */}
+      <div
+        className="fixed inset-x-0 flex justify-center px-4"
+        style={{ bottom: "5rem", zIndex: 50 }}
+      >
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
+            width: "100%",
+            maxWidth: "420px",
             padding: "0.35rem 0.35rem 0.35rem 1rem",
-            background: "var(--color-card)",
+            background: "rgba(20, 22, 28, 0.82)",
+            backdropFilter: "blur(14px)",
             border: "1px solid var(--color-border)",
             borderRadius: "999px",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
           }}
         >
           <input

@@ -33,9 +33,13 @@ const stableUnsubscribe = () => {};
 
 vi.mock("@/lib/auth/AuthProvider", () => ({ useAuth: () => mockAuth }));
 
+const setDocFn = vi.fn().mockResolvedValue(undefined);
+
 vi.mock("firebase/firestore", () => ({
   collection: () => ({}),
   addDoc: (...a: unknown[]) => addDocFn(...a),
+  doc: () => ({}),
+  setDoc: (...a: unknown[]) => setDocFn(...a),
   onSnapshot: (_q: unknown, cb: (snap: unknown) => void) => {
     cb(stableSnapshot);
     return stableUnsubscribe;
@@ -83,7 +87,7 @@ describe("useCoach persistence", () => {
 
   it("writes user message with correct structure", async () => {
     const db = getDb();
-    const col = collection(db, coachMessagesCol("test-uid"));
+    const col = collection(db, coachMessagesCol("test-uid", "conv-1"));
 
     await addDoc(col, {
       role: "user",
@@ -100,7 +104,7 @@ describe("useCoach persistence", () => {
 
   it("writes coach message with suggestionId when suggestion present", async () => {
     const db = getDb();
-    const col = collection(db, coachMessagesCol("test-uid"));
+    const col = collection(db, coachMessagesCol("test-uid", "conv-1"));
 
     // Use the REAL CoachSuggestion shape (rebalance) so this test guards the
     // persisted schema, not an arbitrary object the mock would accept anyway.

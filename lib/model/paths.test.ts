@@ -5,6 +5,7 @@ import {
   txCol,
   allocationsCol,
   consentsCol,
+  coachConversationsCol,
   coachMessagesCol,
   coachMemoriesCol,
 } from "@/lib/model/paths";
@@ -23,7 +24,8 @@ describe("firestore paths", () => {
 
 describe("coach paths", () => {
   it("builds owner-scoped coach collection paths", () => {
-    expect(coachMessagesCol("u1")).toBe("users/u1/coachMessages");
+    expect(coachConversationsCol("u1")).toBe("users/u1/conversations");
+    expect(coachMessagesCol("u1", "c1")).toBe("users/u1/conversations/c1/messages");
     expect(coachMemoriesCol("u1")).toBe("users/u1/coachMemories");
   });
 });
