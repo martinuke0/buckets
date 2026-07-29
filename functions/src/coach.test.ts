@@ -47,5 +47,20 @@ describe("coachReply two-phase tools", () => {
     expect(generateContent.mock.calls[0][0].config.tools).toBeTruthy();
     // phase 2 call passed responseSchema
     expect(generateContent.mock.calls[2][0].config.responseSchema).toBeTruthy();
+
+    // Assert tool result actually reached phase 2
+    const phase2Contents = generateContent.mock.calls[2][0].contents as Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    const fnResponseParts = phase2Contents.flatMap((c) => c.parts).filter((p) => "functionResponse" in p);
+    expect(fnResponseParts.length).toBeGreaterThan(0);
+    // Verify the exact structure: functionResponse.response.result contains the drift value
+    const driftResponse = fnResponseParts.find((p) => {
+      const fr = p.functionResponse as Record<string, unknown>;
+      return fr?.name === "explain_drift";
+    });
+    expect(driftResponse).toBeDefined();
+    const driftResult = ((driftResponse?.functionResponse as Record<string, unknown>)?.response as Record<string, unknown>)?.result as Record<string, unknown>;
+    // The drift tool result (balance 80800 - remaining 80000 = 800 cents) must have reached phase 2
+    expect(driftResult.drift).toBe(800);
+    expect(driftResult.byBucket).toBeDefined();
   });
 });
