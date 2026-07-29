@@ -89,6 +89,22 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
         isIncome: (d.get("isIncome") as boolean) ?? false,
       }));
 
+      // Recurring-detection window: 90 days, separate from the month-scoped prompt data.
+      // find_recurring_charges needs ≥2 charges from the same merchant 25–35 days apart;
+      // a monthly subscription bills once per calendar month, so current-month-only data
+      // yields count=1 for every merchant and the tool can never fire.
+      const recurringWindowStart = new Date(now.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
+      const toolTxnsSnap = await db
+        .collection(`users/${uid}/transactions`)
+        .where("bookedAt", ">=", recurringWindowStart)
+        .get();
+      const toolTxns = toolTxnsSnap.docs.map((d) => ({
+        description: d.get("description") as string,
+        amount: d.get("amount") as number,
+        bookedAt: d.get("bookedAt") as string,
+        isIncome: (d.get("isIncome") as boolean) ?? false,
+      }));
+
       const metaSnap = await db.doc(`users/${uid}/meta/bank`).get();
       const anchoredAt = (metaSnap.exists ? (metaSnap.get("anchoredAt") as string | undefined) : undefined) ?? undefined;
 
@@ -120,7 +136,7 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
       // Build tool context from data already fetched above.
       const totalAllocated = buckets.reduce((t, b) => t + b.allocated, 0);
       const toolCtx: CoachToolCtx = {
-        txns: rawTxns.map((t) => ({ description: t.description, amount: t.amount, bookedAt: t.bookedAt, isIncome: t.isIncome })),
+        txns: toolTxns,
         currentRules: totalAllocated > 0
           ? buckets.map((b) => ({ bucketId: b.id, percent: (b.allocated / totalAllocated) * 100 }))
           : [],
