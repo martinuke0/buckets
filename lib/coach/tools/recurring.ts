@@ -22,7 +22,7 @@ export function findRecurringCharges(
   const out: RecurringCharge[] = [];
   for (const [merchant, list] of groups) {
     if (list.length < 2) continue;
-    const sorted = [...list].sort((a, b) => (a.bookedAt < b.bookedAt ? -1 : 1));
+    const sorted = [...list].sort((a, b) => Date.parse(a.bookedAt) - Date.parse(b.bookedAt));
     let monthly = true;
     for (let i = 1; i < sorted.length; i++) {
       const gap = (Date.parse(sorted[i].bookedAt) - Date.parse(sorted[i - 1].bookedAt)) / DAY_MS;
