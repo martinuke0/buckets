@@ -1,4 +1,4 @@
-import { normalizeMerchant } from "@/lib/categorize/rules";
+import { normalizeMerchant } from "../../categorize/rules";
 
 export interface RecurringCharge {
   merchant: string;

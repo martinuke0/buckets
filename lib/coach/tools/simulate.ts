@@ -1,4 +1,4 @@
-import { splitIncome, type SplitRule, type Allocation } from "@/lib/split/engine";
+import { splitIncome, type SplitRule, type Allocation } from "../../split/engine";
 
 export function simulateMonth(
   income: number,

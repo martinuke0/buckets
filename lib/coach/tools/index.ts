@@ -1,5 +1,5 @@
 import { Type, type FunctionDeclaration } from "@google/genai";
-import type { SplitRule } from "@/lib/split/engine";
+import type { SplitRule } from "../../split/engine";
 import { findRecurringCharges } from "./recurring";
 import { simulateMonth } from "./simulate";
 import { explainDrift } from "./drift";
