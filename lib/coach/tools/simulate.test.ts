@@ -25,4 +25,18 @@ describe("simulateMonth", () => {
   it("throws SplitError when changes make percents not sum to 100", () => {
     expect(() => simulateMonth(200000, rules, [{ bucketId: "fun", percent: 10 }])).toThrow(SplitError);
   });
+
+  it("appends a change for an unknown bucket as a new rule", () => {
+    // start with fun 30 / rent 50 / savings 20; drop savings to 0 and route it to a new bucket
+    const result = simulateMonth(200000, rules, [
+      { bucketId: "savings", percent: 0 },
+      { bucketId: "gifts", percent: 20 },
+    ]);
+    expect(result).toEqual([
+      { bucketId: "fun", amount: 60000 },
+      { bucketId: "rent", amount: 100000 },
+      { bucketId: "savings", amount: 0 },
+      { bucketId: "gifts", amount: 40000 },
+    ]);
+  });
 });
