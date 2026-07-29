@@ -1,11 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, type Content, type Part } from "@google/genai";
 import { buildCoachContext, type CoachTxn } from "./coachContext";
 import { buildSpendSummary } from "./spendSummary";
 import { validateSuggestion, type CoachSuggestion, type CoachReply } from "../../lib/coach/suggestion";
 import { applyRebalance, listCoachMemories, writeCoachMemory } from "./store";
 import { logEvent } from "./logging";
+import { runCoachTool, coachToolDeclarations, type CoachToolCtx } from "../../lib/coach/tools";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -43,8 +44,16 @@ export const coachReply = onCall<CoachReplyRequest, Promise<CoachReply>>(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated");
     }
-    const uid = request.auth.uid;
-    const { message, history } = request.data;
+    return handleCoachReply(request.auth.uid, request.data);
+  },
+);
+
+/**
+ * Handler body for coachReply, extracted so it can be unit-tested directly with a
+ * plain (uid, data) signature instead of reaching into the onCall wrapper.
+ */
+export async function handleCoachReply(uid: string, data: CoachReplyRequest): Promise<CoachReply> {
+    const { message, history } = data;
     logEvent("coachReply", { uid, outcome: "start" });
 
     try {
@@ -106,13 +115,54 @@ export const coachReply = onCall<CoachReplyRequest, Promise<CoachReply>>(
         : "";
       const fullPrompt = `${prompt}${historyBlock}\n\nUser: ${message}\n\nCoach:`;
 
-      // Single structured Gemini call. responseSchema forces valid JSON — no prose to parse.
-      // Bucket IDs are enum-constrained to the user's real buckets, so the model cannot name
-      // an unknown bucket (deletes the old bucketIds.includes guard).
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+
+      // Build tool context from data already fetched above.
+      const totalAllocated = buckets.reduce((t, b) => t + b.allocated, 0);
+      const toolCtx: CoachToolCtx = {
+        txns: rawTxns.map((t) => ({ description: t.description, amount: t.amount, bookedAt: t.bookedAt, isIncome: t.isIncome })),
+        currentRules: totalAllocated > 0
+          ? buckets.map((b) => ({ bucketId: b.id, percent: (b.allocated / totalAllocated) * 100 }))
+          : [],
+        income: totalAllocated,
+        currentBalance: (metaSnap.exists ? (metaSnap.get("currentBalance") as number | undefined) : undefined) ?? 0,
+        buckets: buckets.map((b) => ({ id: b.id, remaining: b.remaining })),
+      };
+
+      // Phase 1 — analysis loop. Tools inform the model; no responseSchema (Gemini
+      // rejects tools + forced JSON together). Hard cap: 3 rounds. Wrapped so a tool
+      // failure never blocks the final structured answer.
+      const contents: Content[] = [
+        { role: "user", parts: [{ text: fullPrompt }] },
+      ];
+      try {
+        for (let round = 0; round < 3; round++) {
+          const res1 = await ai.models.generateContent({
+            model: MODEL,
+            contents,
+            config: { tools: [{ functionDeclarations: coachToolDeclarations }] },
+          });
+          const calls = res1.functionCalls;
+          if (!calls || calls.length === 0) break;
+          contents.push(res1.candidates![0].content as Content);
+          for (const c of calls) {
+            let response: unknown;
+            try { response = runCoachTool(c.name!, (c.args ?? {}) as Record<string, unknown>, toolCtx); }
+            catch (err) { response = { error: err instanceof Error ? err.message : String(err) }; }
+            contents.push({ role: "user", parts: [{ functionResponse: { name: c.name, response: { result: response } } } as Part] });
+          }
+        }
+      } catch (err) {
+        console.warn("coachReply: tool phase failed, continuing to final answer:", err instanceof Error ? err.message : err);
+      }
+
+      // Phase 2 — structured answer. responseSchema forces valid JSON — no prose to parse.
+      // Bucket IDs are enum-constrained to the user's real buckets, so the model cannot name
+      // an unknown bucket. contents now carry any tool results so the model narrates real numbers.
+      contents.push({ role: "user", parts: [{ text: "Now answer the user in the required JSON format." }] });
       const res = await ai.models.generateContent({
         model: MODEL,
-        contents: fullPrompt,
+        contents,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -166,8 +216,7 @@ export const coachReply = onCall<CoachReplyRequest, Promise<CoachReply>>(
       logEvent("coachReply", { uid, outcome: "error", error: err });
       throw err;
     }
-  },
-);
+}
 
 interface ApplyCoachSuggestionRequest {
   suggestion: CoachSuggestion;
