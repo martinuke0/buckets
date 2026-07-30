@@ -33,4 +33,55 @@ describe("MessageBubble citations", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText("Just advice.")).toBeInTheDocument();
   });
+
+  it("chips multiple distinct citations in one reply", () => {
+    render(
+      <MessageBubble
+        role="coach"
+        text="Fun spent €42, Rent spent €900."
+        citations={[
+          { label: "€42", txnId: "tx_fun" },
+          { label: "€900", txnId: "tx_rent" },
+        ]}
+      />
+    );
+    expect(screen.getByRole("link", { name: "€42" })).toHaveAttribute("href", "/dashboard/tx/tx_fun");
+    expect(screen.getByRole("link", { name: "€900" })).toHaveAttribute("href", "/dashboard/tx/tx_rent");
+  });
+
+  it("chips only the first occurrence when a label appears twice", () => {
+    render(
+      <MessageBubble
+        role="coach"
+        text="€42 here and €42 there."
+        citations={[{ label: "€42", txnId: "tx_a" }]}
+      />
+    );
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/dashboard/tx/tx_a");
+    // the second "€42" remains as plain text — the full sentence tail is present
+    expect(screen.getByText(/there\./)).toBeInTheDocument();
+  });
+
+  it("does not double-render when one label overlaps another at the same start", () => {
+    render(
+      <MessageBubble
+        role="coach"
+        text="You spent €42 at Tesco."
+        citations={[
+          { label: "€42 at Tesco", txnId: "tx_long" },
+          { label: "€42", txnId: "tx_short" },
+        ]}
+      />
+    );
+    // exactly one chip renders (the overlap guard drops the second); no corrupted/duplicated text
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    // the longer label wins; text reads correctly end-to-end
+    expect(screen.getByText(/You spent/)).toBeInTheDocument();
+    expect(screen.getByText(/\./)).toBeInTheDocument();
+    // verify the chip contains the longer label (it won the overlap)
+    expect(links[0]).toHaveTextContent("€42 at Tesco");
+  });
 });
