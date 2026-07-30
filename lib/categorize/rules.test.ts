@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeMerchant, chooseBucket, type CategoryRule } from "@/lib/categorize/rules";
+import { normalizeMerchant, chooseBucket, computeSkipLLMPct, type CategoryRule } from "@/lib/categorize/rules";
 
 describe("normalizeMerchant", () => {
   it("lowercases, trims, and collapses whitespace", () => {
@@ -22,5 +22,23 @@ describe("chooseBucket", () => {
   });
   it("needs AI when the matched rule points at a deleted bucket", () => {
     expect(chooseBucket("TESCO STORES", [{ merchant: "tesco stores", bucketId: "gone" }], bucketIds)).toEqual({ needsAI: true });
+  });
+});
+
+describe("computeSkipLLMPct", () => {
+  it("returns 100 when every spend was placed by a rule", () => {
+    expect(computeSkipLLMPct(8, 0, 0)).toBe(100);
+  });
+  it("returns the rounded rule share including noMatch in the denominator", () => {
+    // 6 / (6+3+1) = 60%
+    expect(computeSkipLLMPct(6, 3, 1)).toBe(60);
+    // 1 / (1+1+1) = 33.33 -> 33
+    expect(computeSkipLLMPct(1, 1, 1)).toBe(33);
+  });
+  it("returns 0 when no spend was placed by a rule", () => {
+    expect(computeSkipLLMPct(0, 2, 3)).toBe(0);
+  });
+  it("returns null when there were no spends", () => {
+    expect(computeSkipLLMPct(0, 0, 0)).toBeNull();
   });
 });

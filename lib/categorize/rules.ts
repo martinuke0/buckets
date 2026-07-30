@@ -19,3 +19,13 @@ export function chooseBucket(
   if (rule && bucketIds.includes(rule.bucketId)) return { bucketId: rule.bucketId };
   return { needsAI: true };
 }
+
+// Share of a sync's spends placed by a free deterministic rule (no LLM call),
+// as a rounded percentage. Denominator includes noMatch (spends nothing placed)
+// so the number is honest, not inflated by dropping unplaceable transactions.
+// Returns null when there were no spends to categorize.
+export function computeSkipLLMPct(ruleHits: number, geminiHits: number, noMatch: number): number | null {
+  const total = ruleHits + geminiHits + noMatch;
+  if (total <= 0) return null;
+  return Math.round((ruleHits / total) * 100);
+}
