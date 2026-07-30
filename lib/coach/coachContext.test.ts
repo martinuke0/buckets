@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCoachContext } from "../../functions/src/coachContext";
+import { buildCoachContext, type CoachTxn } from "../../functions/src/coachContext";
 import type { SpendSummary } from "../../functions/src/spendSummary";
 
 const summary: SpendSummary = {
@@ -36,8 +36,8 @@ describe("buildCoachContext transactions section", () => {
   });
   it("renders txns with a `pre` tag for pre-anchor entries and none for post-anchor", () => {
     const { prompt } = buildCoachContext(summary, [], [
-      { description: "Nightclub", amount: -8000, bookedAt: "2026-07-10", bucketId: "fun", isIncome: false, isPreAnchor: false },
-      { description: "Groceries", amount: -1200, bookedAt: "2026-06-20", bucketId: "food", isIncome: false, isPreAnchor: true },
+      { id: "tx_night", description: "Nightclub", amount: -8000, bookedAt: "2026-07-10", bucketId: "fun", isIncome: false, isPreAnchor: false },
+      { id: "tx_groc", description: "Groceries", amount: -1200, bookedAt: "2026-06-20", bucketId: "food", isIncome: false, isPreAnchor: true },
     ]);
     expect(prompt).toMatch(/Recent transactions/);
     expect(prompt).toMatch(/Nightclub.*-€80\.00.*Fun/);
@@ -83,5 +83,22 @@ describe("buildCoachContext anti-hallucination rules", () => {
     const { prompt } = buildCoachContext(summary, []);
     expect(prompt).toMatch(/only ONE rebalance per turn/);
     expect(prompt).toMatch(/queue the next one after they apply/);
+  });
+});
+
+const citeSummary: SpendSummary = {
+  buckets: [{ id: "fun", name: "Fun", allocated: 60000, remaining: 30000, spentThisMonth: 30000, pctUsed: 50, notable: [] }],
+  daysLeftInMonth: 10,
+};
+const citeTxns: CoachTxn[] = [
+  { id: "tx_abc", description: "TESCO STORES", amount: -4200, bookedAt: "2026-07-15", bucketId: "fun", isIncome: false, isPreAnchor: false },
+];
+
+describe("buildCoachContext citations support", () => {
+  it("renders the txn id token in the transaction line and returns txnIds", () => {
+    const { prompt, txnIds } = buildCoachContext(citeSummary, [], citeTxns, "2026-07-20");
+    expect(prompt).toContain("[tx_abc]");
+    expect(prompt).toContain("TESCO STORES");
+    expect(txnIds).toEqual(["tx_abc"]);
   });
 });

@@ -1,6 +1,7 @@
 import type { SpendSummary } from "./spendSummary";
 
 export interface CoachTxn {
+  id: string;
   description: string;
   amount: number;      // integer cents, signed (spend negative, income positive)
   bookedAt: string;    // ISO date
@@ -16,7 +17,7 @@ export function buildCoachContext(
   memories: string[],
   contextTxns: CoachTxn[] = [],
   today?: string, // ISO date YYYY-MM-DD — grounds the coach in real time so it doesn't hallucinate "yesterday"
-): { prompt: string; bucketIds: string[] } {
+): { prompt: string; bucketIds: string[]; txnIds: string[] } {
   const bucketIds = summary.buckets.map((b) => b.id);
   const nameById = new Map(summary.buckets.map((b) => [b.id, b.name]));
 
@@ -41,7 +42,7 @@ export function buildCoachContext(
           const tag = t.isPreAnchor ? " · pre" : "";
           const sign = t.amount < 0 ? "-" : "";
           const absAmount = Math.abs(t.amount);
-          return `- ${t.bookedAt} · ${t.description} · ${sign}€${(absAmount / 100).toFixed(2)} · ${bucket}${tag}`;
+          return `- [${t.id}] ${t.bookedAt} · ${t.description} · ${sign}€${(absAmount / 100).toFixed(2)} · ${bucket}${tag}`;
         })
         .join("\n")}\n\nPre-anchor entries are historical — informational for spending patterns and advice, but they do NOT draw current buckets. Rebalance suggestions must be based on the bucket state above.`
     : "";
@@ -69,8 +70,11 @@ Response fields:
 - \`reply\`: plain conversational text (2-3 sentences for simple questions). Never mention buckets by their ID — use their names.
 - \`suggestion\`: set ONLY when a concrete rebalance clearly helps (excess bucket -> short bucket, sufficient funds). Use the exact bucket IDs. Amount is integer cents. Leave null otherwise.
 - \`memory\`: set ONLY when the user expresses a durable goal/preference — a short first-person note. Leave null otherwise.
+- \`citations\`: optional. For each concrete number in your reply that comes from a specific transaction, add { "label": <exact substring of your reply to make tappable>, "txnId": <the [tx_...] id of that transaction> }. Only cite transactions shown above, by their exact id. Omit if no number maps to a specific transaction.
 
 Keep replies friendly and concise.`;
 
-  return { prompt, bucketIds };
+  const txnIds = contextTxns.map((t) => t.id);
+
+  return { prompt, bucketIds, txnIds };
 }

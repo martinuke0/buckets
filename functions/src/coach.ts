@@ -82,6 +82,7 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
         .where("bookedAt", ">=", monthStart)
         .get();
       const rawTxns = txnsSnap.docs.map((d) => ({
+        id: d.id,
         description: d.get("description") as string,
         amount: d.get("amount") as number,
         bookedAt: d.get("bookedAt") as string,
@@ -120,7 +121,7 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
         rawTxns,
         now,
       );
-      const { prompt, bucketIds } = buildCoachContext(summary, memories, contextTxns, today);
+      const { prompt, bucketIds, txnIds } = buildCoachContext(summary, memories, contextTxns, today);
 
       // Include the last few conversation turns so the coach has short-term memory
       // across the same session. The client caps history at ~5 (useCoach.ts).
