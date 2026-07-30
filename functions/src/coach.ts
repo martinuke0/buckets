@@ -21,6 +21,7 @@ function parseStructuredReply(text: string | undefined): CoachReply {
       reply: typeof o.reply === "string" ? o.reply : "",
       suggestion: o.suggestion,
       memory: typeof o.memory === "string" ? o.memory : undefined,
+      citations: Array.isArray(o.citations) ? o.citations : undefined,
     };
   } catch {
     return { reply: "" };
@@ -198,6 +199,18 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
                 required: ["type", "fromBucketId", "toBucketId", "amount"],
               },
               memory: { type: Type.STRING, nullable: true },
+              citations: {
+                type: Type.ARRAY,
+                nullable: true,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    label: { type: Type.STRING },
+                    txnId: { type: Type.STRING, enum: txnIds },
+                  },
+                  required: ["label", "txnId"],
+                },
+              },
             },
             required: ["reply"],
           },
@@ -215,6 +228,12 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
         else console.warn(`coachReply: dropping invalid suggestion for user ${uid}: ${check.reason}`);
       }
 
+      // Filter citations: keep only those whose txnId is in the shown set.
+      const txnIdSet = new Set(txnIds);
+      const citations = (parsed.citations ?? [])
+        .filter((c) => c && typeof c.label === "string" && typeof c.txnId === "string" && txnIdSet.has(c.txnId))
+        .map((c) => ({ label: c.label, txnId: c.txnId }));
+
       // Best-effort memory persist (existing rule).
       const memory = parsed.memory?.trim() || undefined;
       if (memory) {
@@ -222,12 +241,13 @@ export async function handleCoachReply(uid: string, data: CoachReplyRequest): Pr
         catch (err) { console.warn(`coachReply: writeCoachMemory skipped:`, err instanceof Error ? err.message : err); }
       }
 
-      logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(validSuggestion), hasMemory: Boolean(memory) });
+      logEvent("coachReply", { uid, outcome: "ok", hasSuggestion: Boolean(validSuggestion), hasMemory: Boolean(memory), hasCitations: citations.length > 0 });
 
       return {
         reply: parsed.reply,
         ...(validSuggestion ? { suggestion: validSuggestion } : {}),
         ...(memory ? { memory } : {}),
+        ...(citations.length ? { citations } : {}),
       };
     } catch (err) {
       logEvent("coachReply", { uid, outcome: "error", error: err });

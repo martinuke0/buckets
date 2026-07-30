@@ -9,6 +9,7 @@ export type CoachReply = {
   reply: string;
   suggestion?: CoachSuggestion;
   memory?: string;
+  citations?: { label: string; txnId: string }[];
 };
 
 export function validateSuggestion(

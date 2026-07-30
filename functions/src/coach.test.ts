@@ -127,4 +127,37 @@ describe("coachReply two-phase tools", () => {
     expect(netflix).toBeDefined();
     expect(netflix?.count).toBeGreaterThanOrEqual(2);
   });
+
+  it("returns citations whose txnId is in the shown set, drops unknown ids", async () => {
+    // Set up a transaction with id tx_abc
+    mockTransactions = [
+      {
+        id: "tx_abc",
+        get: (k: string) => ({
+          description: "TESCO",
+          amount: -4200,
+          bookedAt: "2024-07-15",
+          bucketId: "fun",
+          isIncome: false,
+        } as Record<string, unknown>)[k],
+      },
+    ];
+
+    generateContent
+      // phase 1: no tools requested
+      .mockResolvedValueOnce({ functionCalls: undefined, candidates: [{ content: { role: "model", parts: [{ text: "" }] } }] })
+      // phase 2: structured answer with citations
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          reply: "You spent €42 at Tesco.",
+          citations: [
+            { label: "€42 at Tesco", txnId: "tx_abc" },
+            { label: "ghost", txnId: "tx_does_not_exist" },
+          ],
+        }),
+      });
+
+    const result = await handleCoachReply("u1", { message: "how much at tesco?", history: [] }) as { citations?: { label: string; txnId: string }[] };
+    expect(result.citations).toEqual([{ label: "€42 at Tesco", txnId: "tx_abc" }]);
+  });
 });
