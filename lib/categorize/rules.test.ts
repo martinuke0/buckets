@@ -8,6 +8,12 @@ describe("normalizeMerchant", () => {
   it("strips trailing card-processor noise", () => {
     expect(normalizeMerchant("AMZN Mktp*A1B2C3")).toBe("amzn mktp");
   });
+  it("strips slashes (Firestore doc-id safety)", () => {
+    expect(normalizeMerchant("PAYPAL /EBAY")).toBe("paypal ebay");
+  });
+  it("returns empty string for all-digit input", () => {
+    expect(normalizeMerchant("12345")).toBe("");
+  });
 });
 
 describe("chooseBucket", () => {

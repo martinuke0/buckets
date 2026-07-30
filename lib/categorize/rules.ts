@@ -5,6 +5,7 @@ export function normalizeMerchant(name: string): string {
     .toLowerCase()
     .replace(/[*#].*$/, "")       // drop processor suffix after * or #
     .replace(/[0-9]+/g, "")       // drop digits
+    .replace(/\//g, " ")          // strip slashes (Firestore doc-id safety)
     .replace(/\s+/g, " ")
     .trim();
 }

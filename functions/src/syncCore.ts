@@ -151,8 +151,11 @@ export async function syncOneUser(uid: string, opts?: { recordOnly?: boolean }):
       bucketId = aiIdx >= 0 ? aiBuckets[aiIdx] ?? null : null;
       if (bucketId) {
         geminiHits++;
-        try { await saveCategoryRule(uid, normalizeMerchant(txn.description), bucketId); }
-        catch (err) { console.warn(`syncOneUser(${uid}): rule learn skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err); }
+        const ruleKey = normalizeMerchant(txn.description);
+        if (ruleKey) {
+          try { await saveCategoryRule(uid, ruleKey, bucketId); }
+          catch (err) { console.warn(`syncOneUser(${uid}): rule learn skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err); }
+        }
       } else {
         noMatch++;
       }

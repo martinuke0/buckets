@@ -112,4 +112,29 @@ describe("syncOneUser rule learning + metric", () => {
     // Assert: applySpendCategorization was still called (sync continued)
     expect(store.applySpendCategorization).toHaveBeenCalled();
   });
+
+  it("skips saveCategoryRule when normalized merchant is empty", async () => {
+    // Setup: Replace default spend with one that normalizes to empty (all digits)
+    const digitOnlySpend = { providerTxnId: "t2", amount: -100, description: "12345", bookedAt: "2026-07-15", isIncome: false };
+    vi.mocked(store.getCategoryRules).mockResolvedValueOnce([]);
+    vi.mocked(categorizer.categorizeBatchWithGemini).mockResolvedValueOnce(["fun"]);
+
+    // Override writeTransactions for this test
+    const originalWriteTxns = (await import("./store")).writeTransactions;
+    vi.mocked(store as any).writeTransactions = vi.fn(async () => [digitOnlySpend]);
+
+    await syncOneUser("u1");
+
+    // Assert: saveCategoryRule was NOT called (empty key skipped)
+    expect(store.saveCategoryRule).not.toHaveBeenCalled();
+
+    // Assert: setBankMeta was still called with skipLLMPct (sync completed)
+    const calls = vi.mocked(store.setBankMeta).mock.calls as unknown as Array<[string, { skipLLMPct?: number }]>;
+    expect(calls.length).toBeGreaterThan(0);
+    const metaCall = calls[calls.length - 1][1];
+    expect(metaCall.skipLLMPct).toBeDefined();
+
+    // Restore
+    vi.mocked(store as any).writeTransactions = originalWriteTxns;
+  });
 });
