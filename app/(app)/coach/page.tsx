@@ -260,7 +260,7 @@ export default function Page() {
 
         {messages.map((msg) => (
           <div key={msg.id}>
-            <MessageBubble role={msg.role} text={msg.text} />
+            <MessageBubble role={msg.role} text={msg.text} citations={msg.citations} />
             {msg.suggestion && msg.suggestionId && (msg.appliedAt || !dismissed.has(msg.suggestionId)) && (
               <div style={{ marginLeft: "34px", marginBottom: "0.75rem" }}>
                 <SuggestionCard
