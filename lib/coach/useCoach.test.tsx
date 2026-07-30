@@ -252,4 +252,22 @@ describe("useCoach send", () => {
     expect(coachCall![1]).not.toHaveProperty("suggestion");
     expect(coachCall![1]).not.toHaveProperty("suggestionId");
   });
+
+  it("persists citations when the reply carries them", async () => {
+    callableFn.mockImplementation(async () => ({
+      data: { reply: "You spent €42 at Tesco.", citations: [{ label: "€42 at Tesco", txnId: "tx_abc" }] },
+    }));
+
+    function StreamProbe() {
+      const hook = useCoach();
+      return <button data-testid="send" onClick={() => hook.send("hi")} />;
+    }
+    render(<StreamProbe />);
+    screen.getByTestId("send").click();
+
+    await waitFor(() => {
+      const coachCall = addDocFn.mock.calls.find((c) => c[1]?.role === "coach");
+      expect(coachCall?.[1]?.citations).toEqual([{ label: "€42 at Tesco", txnId: "tx_abc" }]);
+    });
+  });
 });

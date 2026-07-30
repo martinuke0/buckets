@@ -16,6 +16,7 @@ export interface CoachMessage {
   suggestion?: CoachSuggestion;
   suggestionId?: string;
   appliedAt?: string; // ISO — from Timestamp.toDate().toISOString() on read
+  citations?: { label: string; txnId: string }[];
 }
 
 interface CoachReplyRequest {
@@ -102,6 +103,7 @@ export function useCoach() {
           suggestion: data.suggestion as CoachSuggestion | undefined,
           suggestionId: data.suggestionId as string | undefined,
           appliedAt: appliedAtRaw?.toDate ? appliedAtRaw.toDate().toISOString() : undefined,
+          citations: data.citations as CoachMessage["citations"] | undefined,
         };
       });
       setMessages(msgs);
@@ -149,6 +151,9 @@ export function useCoach() {
       if (data.suggestion && typeof data.suggestion === "object") {
         coachDoc.suggestion = data.suggestion;
         coachDoc.suggestionId = crypto.randomUUID();
+      }
+      if (Array.isArray(data.citations) && data.citations.length > 0) {
+        coachDoc.citations = data.citations;
       }
       await addDoc(collection(getDb(), coachMessagesCol(user.uid, conversationId)), coachDoc);
     } catch (err) {
