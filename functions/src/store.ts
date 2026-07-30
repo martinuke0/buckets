@@ -61,7 +61,7 @@ export async function listConnections(
 // (readable by the owner per firestore.rules). No tokens ever land here.
 export async function setBankMeta(
   uid: string,
-  fields: { connectedAt?: string; lastSyncedAt?: string; currentBalance?: number }
+  fields: { connectedAt?: string; lastSyncedAt?: string; currentBalance?: number; skipLLMPct?: number }
 ): Promise<void> {
   await getFirestore()
     .doc(`users/${uid}/meta/bank`)

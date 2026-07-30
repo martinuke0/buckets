@@ -8,9 +8,10 @@ import {
   getCategoryRules,
   applySpendCategorization,
   setBankMeta,
+  saveCategoryRule,
   type NormalizedTxn,
 } from "./store";
-import { chooseBucket } from "../../lib/categorize/rules";
+import { chooseBucket, normalizeMerchant, computeSkipLLMPct } from "../../lib/categorize/rules";
 import { categorizeBatchWithGemini } from "./categorizer";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -148,8 +149,13 @@ export async function syncOneUser(uid: string, opts?: { recordOnly?: boolean }):
     if (bucketId === null) {
       const aiIdx = needsAI.indexOf(txn);
       bucketId = aiIdx >= 0 ? aiBuckets[aiIdx] ?? null : null;
-      if (bucketId) geminiHits++;
-      else noMatch++;
+      if (bucketId) {
+        geminiHits++;
+        try { await saveCategoryRule(uid, normalizeMerchant(txn.description), bucketId); }
+        catch (err) { console.warn(`syncOneUser(${uid}): rule learn skipped for ${txn.providerTxnId}:`, err instanceof Error ? err.message : err); }
+      } else {
+        noMatch++;
+      }
     }
     if (!bucketId) continue;
     try {
@@ -159,8 +165,9 @@ export async function syncOneUser(uid: string, opts?: { recordOnly?: boolean }):
     }
   }
 
+  const skipLLMPct = computeSkipLLMPct(ruleHits, geminiHits, noMatch);
   console.log(
-    `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch} (bulk AI calls: ${needsAI.length > 0 ? 1 : 0})`
+    `syncOneUser(${uid}): categorization summary - ruleHits: ${ruleHits}, geminiHits: ${geminiHits}, noMatch: ${noMatch}, skipLLMPct: ${skipLLMPct} (bulk AI calls: ${needsAI.length > 0 ? 1 : 0})`
   );
 
   // Refresh the real balance for the drift indicator (best-effort; never re-anchor here).
@@ -171,7 +178,11 @@ export async function syncOneUser(uid: string, opts?: { recordOnly?: boolean }):
   } catch (err) {
     console.warn(`syncOneUser(${uid}): balance refresh skipped:`, err instanceof Error ? err.message : err);
   }
-  await setBankMeta(uid, { lastSyncedAt: new Date().toISOString(), ...(currentBalance !== undefined ? { currentBalance } : {}) });
+  await setBankMeta(uid, {
+    lastSyncedAt: new Date().toISOString(),
+    ...(currentBalance !== undefined ? { currentBalance } : {}),
+    ...(skipLLMPct !== null ? { skipLLMPct } : {}),
+  });
 
   return { added: created.length };
 }
